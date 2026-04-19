@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel 902 Supabase Ajustado v4</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#071022; --line:#263b77; --txt:#edf3ff; --muted:#9bb0df;
+      --card:#101d3f; --card2:#152454; --green:#155f41; --gray:#4c5260; --red:#65222a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:linear-gradient(180deg,#071022,#09152f 45%,#081127);color:var(--txt)}
+    .app{display:grid;grid-template-columns:200px 1fr;gap:10px;min-height:100vh;padding:10px}
+    .side,.panel{background:rgba(16,29,63,.96);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .side{padding:10px;display:flex;flex-direction:column;gap:8px}
+    .brand{padding:12px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#16265a,#0f1c41)}
+    .brand h1{margin:0 0 6px;font-size:16px}
+    .brand p{margin:0;color:var(--muted);font-size:11px;line-height:1.35}
+    .navbtn{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#0f1a3a;color:#fff;font-weight:700;text-align:left;cursor:pointer;font-size:12px}
+    .navbtn.active,.navbtn:hover{background:#1a2b61}
+    .main{display:flex;flex-direction:column;gap:10px;min-width:0}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .title{font-size:17px;font-weight:800}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    button,label.filebtn,input,select{border:1px solid var(--line);border-radius:10px;background:#10204a;color:#fff;padding:8px 10px;font-size:12px}
+    .cfgInputLine5 input{width:100%;min-width:0}
+    .cfgItem5 > div{min-width:0;overflow-wrap:anywhere}
+    button,label.filebtn{cursor:pointer;font-weight:700}
+    input::placeholder{color:#88a0d1}
+    .cfgInputLine5 .field{flex:1;min-width:120px}
+    .cfgInputLine5 .field:nth-child(2){min-width:120px;max-width:170px}
+    .cfgInputLine5 .field:nth-child(3),
+    .cfgInputLine5 .field:nth-child(4){flex:0 0 60px;min-width:60px;max-width:60px}
+    .cfgInputLine5 .field:nth-child(5){flex:0 0 110px;min-width:110px;max-width:110px}
+
+    .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+    .cardBtn{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#15275c,#0f1d43);cursor:pointer;text-align:left}
+    .cardBtn .k{font-size:11px;color:var(--muted)}
+    .cardBtn .v{font-size:24px;font-weight:900;line-height:1;margin:5px 0}
+    .panel{padding:10px;min-width:0}
+    .filters{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+    .field small{display:block;color:var(--muted);margin-bottom:4px;font-size:10px}
+    .hidden{display:none!important}
+    .tableWrap{overflow:auto;max-height:calc(100vh - 235px);border:1px solid var(--line);border-radius:12px}
+    table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+    th,td{padding:6px;border-bottom:1px solid #22396f;vertical-align:top}
+    th{position:sticky;top:0;background:#17295e;z-index:1;text-align:left}
+    td{background:#0c1734}
+    tr:hover td{background:#112049}
+    .small{font-size:10px;color:var(--muted)}
+    td select{
+      margin-right:10px;
+      min-width:90px;
+    }
+    .clientTag{color:#69d0ff;font-size:10px;margin-top:4px}
+    .rowActions{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-left:8px;
+    }
+    .mini{padding:6px 8px;font-size:10px}
+    .btn-fat{background:#155f41;border-color:#1b8b5f}
+    .btn-fin{background:#4c5260;border-color:#7b8393}
+    .btn-red{background:#65222a;border-color:#b14a57}
+    .btn-green{background:#145f41;border-color:#1f9163}
+    .sectionTitle{font-size:15px;font-weight:800;margin:0 0 8px}
+    .summaryLine{display:flex;gap:14px;flex-wrap:wrap;color:#cfe0ff;font-size:12px;margin-bottom:8px}
+    .grid2{display:grid;grid-template-columns:minmax(420px,1.2fr) minmax(360px,.9fr);gap:10px;align-items:start}
+    .cfgCols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+    .cfgStack{display:flex;flex-direction:column;gap:10px}
+    .cfgGroup{padding:10px;border:1px solid var(--line);border-radius:12px;background:#0d1838;min-width:0;overflow:visible}
+    .cfgInputLine{display:grid;grid-template-columns:minmax(0,180px) 34px;gap:6px;align-items:end;margin-bottom:8px}
+    .cfgInputLine5{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:flex-end;
+      margin-bottom:10px;
+      width:100%;
+    }
+    .cfgHistory{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}
+    .cfgItem{display:inline-grid;grid-template-columns:auto 24px;gap:6px;align-items:center;background:#101d3f;border:1px solid var(--line);border-radius:999px;padding:5px 8px;font-size:11px;max-width:100%}
+    .cfgItem5{
+      display:grid;
+      grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) 58px 58px 90px 24px;
+      gap:8px;
+      align-items:center;
+      background:#101d3f;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:6px 8px;
+      font-size:11px;
+      width:100%;
+      max-width:100%;
+    }
+    .cfgFreteHistory{display:flex;flex-direction:column;gap:6px;min-width:0}
+    .xbtn{padding:2px 6px;font-size:10px;border-radius:999px;line-height:1;min-width:24px}
+    .plusbtn{width:34px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:10px}
+    .monthCard{display:grid;grid-template-columns:minmax(120px,.9fr) minmax(120px,.8fr) auto;gap:10px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:14px;background:#0d1838;min-height:132px}
+    .monthStatus{font-size:13px;line-height:1.25;justify-self:center;text-align:center;max-width:140px}
+    .monthActions{display:flex;flex-direction:column;gap:8px;align-items:flex-end;min-width:116px}
+    .ok{color:#8cf1ba}.warn{color:#ffd7a7}
+    .supastatus{font-size:11px;color:var(--muted)}
+    @media (max-width:1350px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.cfgCols{grid-template-columns:1fr 1fr}}
+    @media (max-width:1180px){
+      .cfgCols{grid-template-columns:1fr}
+      .cfgInputLine5{ position:relative;grid-template-columns:1fr 1fr 80px 80px 100px 34px}
+      .cfgItem5{grid-template-columns:1fr 1fr 80px 80px 100px 24px}
+    }
+    @media (max-width:1080px){.app{grid-template-columns:1fr}.cards,.filters,.cfgCols,.cfgInputLine5,.cfgItem5{grid-template-columns:1fr}.tableWrap{max-height:none}.monthCard{grid-template-columns:1fr}.monthActions{align-items:flex-start}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <h1>Painel 902</h1>
+      <p>Versão ajustada para Supabase com controle mensal e configurações mais discretas.</p>
+    </div>
+    <button class="navbtn active" data-tab="ativo">Painel Ativo</button>
+    <button class="navbtn" data-tab="aduana">Aduana</button>
+    <button class="navbtn" data-tab="alertaNac">Clientes alerta nacional</button>
+    <button class="navbtn" data-tab="alertaInt">Clientes alerta internacional impo</button>
+    <button class="navbtn" data-tab="alertaExpo">Clientes alerta internacional expo</button>
+    <button class="navbtn" data-tab="finalizados">Finalizados</button>
+    <button class="navbtn" data-tab="config">Configurações</button>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="title" id="pageTitle">Painel Ativo</div>
+        <div class="supastatus" id="supabaseStatus">Supabase: pronta para sincronizar</div>
+      </div>
+      <div class="actions">
+        <label class="filebtn">Importar Excel 902<input id="fileExcel" type="file" accept=".xls,.xlsx,.csv" hidden></label>
+        <button id="btnSyncSupabase">Sincronizar Supabase</button>
+        <button id="btnCarregarSupabase">Carregar Supabase</button>
+        <button id="btnExport">Exportar Base</button>
+        <label class="filebtn">Importar Base<input id="fileBase" type="file" accept=".json" hidden></label>
+      </div>
+    </div>
+
+    <div class="cards">
+      <button class="cardBtn" data-open="ativo"><div class="k">PCs ativas</div><div class="v" id="cAtivas">0</div><div class="k">No painel principal</div></button>
+      <button class="cardBtn" data-open="aduana"><div class="k">Em aduana</div><div class="v" id="cAduana">0</div><div class="k">Clientes com regra de aduana</div></button>
+      <button class="cardBtn" data-open="alertaNac"><div class="k">Alerta nacional</div><div class="v" id="cNac">0</div><div class="k">UF destino diferente de EX</div></button>
+      <button class="cardBtn" data-open="alertaInt"><div class="k">Alerta internacional impo</div><div class="v" id="cInt">0</div><div class="k">UF EX ou saída de aduana</div></button>
+      <button class="cardBtn" data-open="alertaExpo"><div class="k">Alerta internacional expo</div><div class="v" id="cExpo">0</div><div class="k">Clientes exportação com UF destino EX</div></button>
+    </div>
+
+    <section id="tab-ativo" class="panel tab">
+      <div class="filters">
+        <div class="field"><small>Busca</small><input id="buscaAtivo" placeholder="Cavalo, pagador, posição, motorista..." /></div>
+        <div class="field"><small>Cliente</small><select id="clienteAtivo"><option value="">Todos</option></select></div>
+        <div class="field"><small>UF origem</small><select id="ufOrigemAtivo"><option value="">Todas</option></select></div>
+        <div class="field"><small>UF destino</small><select id="ufDestinoAtivo"><option value="">Todas</option></select></div>
+      </div>
+      <h3 class="sectionTitle">PCs ativas</h3>
+      <div class="tableWrap"><table id="tbAtivo"></table></div>
+    </section>
+
+    <section id="tab-aduana" class="panel tab hidden">
+      <div class="filters" style="grid-template-columns:1.5fr 1fr 1fr">
+        <div class="field"><small>Busca</small><input id="buscaAduana" placeholder="Cavalo, cliente, posição..." /></div>
+        <div class="field"><small>Cliente</small><select id="clienteAduana"><option value="">Todos</option></select></div>
+        <div class="field"><small>UF destino</small><select id="ufDestinoAduana"><option value="">Todas</option></select></div>
+      </div>
+      <h3 class="sectionTitle">Aduana</h3>
+      <div class="summaryLine">
+        <div>Total de casos: <strong id="sumAduanaQtd">0</strong></div>
+        <div>Total de frete padrão: <strong id="sumAduanaFrete">R$ 0,00</strong></div>
+      </div>
+      <div class="tableWrap"><table id="tbAduana"></table></div>
+    </section>
+
+    <section id="tab-alertaNac" class="panel tab hidden">
+      <div class="filters">
+        <div class="field"><small>Busca</small><input id="buscaNac" placeholder="Cavalo, cliente, posição..." /></div>
+        <div class="field"><small>Cliente</small><select id="clienteNac"><option value="">Todos</option></select></div>
+        <div class="field"><small>Status</small><select id="statusNac"><option value="">Todos</option></select></div>
+        <div class="field"><small>UF destino</small><select id="ufDestinoNac"><option value="">Todas</option></select></div>
+      </div>
+      <h3 class="sectionTitle">Clientes alerta nacional</h3>
+      <div class="tableWrap"><table id="tbNac"></table></div>
+    </section>
+
+    <section id="tab-alertaInt" class="panel tab hidden">
+      <div class="filters">
+        <div class="field"><small>Busca</small><input id="buscaInt" placeholder="Cavalo, cliente, posição..." /></div>
+        <div class="field"><small>Cliente</small><select id="clienteInt"><option value="">Todos</option></select></div>
+        <div class="field"><small>Status</small><select id="statusInt"><option value="">Todos</option></select></div>
+        <div class="field"><small>UF destino</small><select id="ufDestinoInt"><option value="">Todas</option></select></div>
+      </div>
+      <h3 class="sectionTitle">Clientes alerta internacional</h3>
+      <div class="tableWrap"><table id="tbInt"></table></div>
+    </section>
+
+    
+    <section id="tab-alertaExpo" class="panel tab hidden">
+      <div class="filters">
+        <div class="field"><small>Busca</small><input id="buscaExpo" placeholder="Cavalo, cliente, posição..." /></div>
+        <div class="field"><small>Cliente</small><select id="clienteExpo"><option value="">Todos</option></select></div>
+        <div class="field"><small>Status</small><select id="statusExpo"><option value="">Todos</option></select></div>
+        <div class="field"><small>UF destino</small><select id="ufDestinoExpo"><option value="">Todas</option></select></div>
+      </div>
+      <h3 class="sectionTitle">Clientes alerta internacional expo</h3>
+      <div class="tableWrap"><table id="tbExpo"></table></div>
+    </section>
+
+<section id="tab-finalizados" class="panel tab hidden">
+      <div class="summaryLine"><button id="btnLimparFinalizados" class="btn-red">Excluir lote local</button></div>
+      <h3 class="sectionTitle">Finalizados</h3>
+      <div class="tableWrap"><table id="tbFim"></table></div>
+    </section>
+
+    <section id="tab-config" class="panel tab hidden">
+      <div class="grid2">
+        <div class="cfgStack">
+          <div>
+            <h3 class="sectionTitle">Controle mensal</h3>
+            <div class="cfgGroup">
+              <div class="small" style="margin-bottom:8px">Aqui o admin vê quais competências já podem ser zeradas.</div>
+              <div id="mesesBox"></div>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="sectionTitle">Frete padrão</h3>
+            <div class="cfgGroup">
+              <div class="cfgInputLine5">
+                <div class="field"><small>Tomador</small><input id="fPagador" placeholder="Tomador" /></div>
+                <div class="field"><small>Remetente</small><input id="fRemetente" placeholder="Remetente" /></div>
+                <div class="field"><small>UF origem</small><input id="fUfOrigem" value="EX" /></div>
+                <div class="field"><small>UF destino</small><input id="fUfDestino" placeholder="UF" /></div>
+                <div class="field"><small>Frete</small><input id="fFrete" placeholder="0,00" /></div>
+                <button id="addFrete" class="plusbtn">+</button>
+              </div>
+              <div class="cfgFreteHistory" id="fretesBox"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfgCols">
+          <div class="cfgStack">
+            <div>
+              <h3 class="sectionTitle">Clientes com regra de aduana</h3>
+              <div class="cfgGroup">
+                <div class="cfgInputLine">
+                  <div class="field"><small>Cliente</small><input id="novoPaga" placeholder="Digite e clique em +" /></div>
+                  <button id="addPaga" class="plusbtn">+</button>
+                </div>
+                <div class="cfgHistory" id="pagaBox"></div>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="sectionTitle">Aduanas monitoradas</h3>
+              <div class="cfgGroup">
+                <div class="cfgInputLine">
+                  <div class="field"><small>Aduana</small><input id="novoAduana" placeholder="Digite e clique em +" /></div>
+                  <button id="addAduana" class="plusbtn">+</button>
+                </div>
+                <div class="cfgHistory" id="aduanasBox"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfgStack">
+            <div>
+              <h3 class="sectionTitle">Clientes alerta nacional</h3>
+              <div class="cfgGroup">
+                <div class="cfgInputLine">
+                  <div class="field"><small>Cliente</small><input id="novoAlerta" placeholder="Digite e clique em +" /></div>
+                  <button id="addAlerta" class="plusbtn">+</button>
+                </div>
+                <div class="cfgHistory" id="alertasBox"></div>
+              </div>
+            </div>
+            <div>
+              <h3 class="sectionTitle">Clientes exportação EX</h3>
+              <div class="cfgGroup">
+                <div class="cfgInputLine">
+                  <div class="field"><small>Cliente</small><input id="novoExpo" placeholder="Digite e clique em +" /></div>
+                  <button id="addExpo" class="plusbtn">+</button>
+                </div>
+                <div class="cfgHistory" id="expoBox"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summaryLine" style="margin-top:10px">
+        <button id="btnSalvarCfg">Salvar configurações</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+const STORE = 'painel902_supabase_v20';
+const state = {
+  rows: [],
+  finalizados: [],
+  config: {
+    aduanas: ['SAO BORJA','SANTO TOME','DIONISIO','BERNARDO','FOZ DO IGUACU','PUERTO IGUACU','CHUI','CHUY'],
+    alerta: ['MARS','NISSIN','CAMPARI','COLGATE'],
+    expo: [],
+    paga: ['BENASSI'],
+    fretes: [{pagador:'BENASSI', remetente:'SOCIEDAD EXPORTADORA VERFRUIT SPA', ufOrigem:'EX', ufDestino:'PR', frete:29000}]
+  },
+  supabase: null
+};
+
+function norm(v){ return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function money(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function saveLocal(){ localStorage.setItem(STORE, JSON.stringify({rows:state.rows, finalizados:state.finalizados, config:state.config})); }
+let saveTimer = null;
+function saveLocalDebounced(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveLocal, 250);
+}
+function loadLocal(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(STORE)||'null');
+    if(raw){
+      state.rows = raw.rows || [];
+      state.finalizados = raw.finalizados || [];
+      if(raw.config){
+        state.config = {
+          aduanas: raw.config.aduanas || state.config.aduanas,
+          alerta: raw.config.alerta || state.config.alerta,
+          expo: raw.config.expo || [],
+          paga: raw.config.paga || state.config.paga,
+          fretes: raw.config.fretes || state.config.fretes
+        };
+      }
+    }
+  }catch(e){}
+  if(!Array.isArray(state.config.aduanas)) state.config.aduanas = [];
+  if(!Array.isArray(state.config.alerta)) state.config.alerta = [];
+  if(!Array.isArray(state.config.expo)) state.config.expo = [];
+  if(!Array.isArray(state.config.paga)) state.config.paga = [];
+  if(!Array.isArray(state.config.fretes)) state.config.fretes = [];
+}
+function setStatusText(msg){ supabaseStatus.textContent = msg; }
+function initSupabase(){
+  if(!SUPABASE_URL || !SUPABASE_ANON_KEY){ setStatusText('Supabase: preencha URL e anon key no HTML'); return; }
+  try{ state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); setStatusText('Supabase: configurada no HTML'); }catch(e){ setStatusText('Supabase: erro ao criar cliente'); }
+}
+function openTab(tab){
+  document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-'+tab).classList.remove('hidden');
+  document.querySelectorAll('.navbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  const labels = {ativo:'Painel Ativo', aduana:'Aduana', alertaNac:'Clientes alerta nacional', alertaInt:'Clientes alerta internacional impo', alertaExpo:'Clientes alerta internacional expo', finalizados:'Finalizados', config:'Configurações'};
+  pageTitle.textContent = labels[tab];
+  renderAll(true);
+}
+document.querySelectorAll('.navbtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.tab));
+document.querySelectorAll('.cardBtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.open));
+
+function isAduanaPosition(pos){ const t = norm(pos); return state.config.aduanas.some(x => t.includes(norm(x))); }
+function isInBrazil(pos){ return norm(pos).includes('BRASIL'); }
+function isUFEx(v){ const t = norm(v); return t === 'EX' || t === 'UF EX' || t.endsWith(' EX') || t.startsWith('EX '); }
+function hasAlert(row){ return state.config.alerta.some(x => norm(row.pagador).includes(norm(x))); }
+function hasExpo(row){ return state.config.expo.some(x => norm(row.pagador).includes(norm(x))); }
+function hasPaga(row){ return state.config.paga.some(x => norm(row.pagador).includes(norm(x))); }
+function fretePadrao(row){
+  const p = norm(row.pagador), r = norm(row.remetente), o = norm(row.ufRem), d = norm(row.ufDest);
+  const found = state.config.fretes.find(f => (!f.pagador || p.includes(norm(f.pagador))) && (!f.remetente || r.includes(norm(f.remetente))) && norm(f.ufOrigem) === o && norm(f.ufDestino) === d);
+  return found ? Number(found.frete || 0) : 0;
+}
+function competenciaMes(dataPc){ const raw = String(dataPc || '').trim().split('/'); return raw.length === 3 ? `${raw[2]}-${raw[1]}` : ''; }
+function reclassify(){
+  state.rows.forEach(row => {
+    row.alerta = hasAlert(row);
+    row.aduana = isAduanaPosition(row.posicao) && hasPaga(row);
+    row.frete = fretePadrao(row);
+    row.competencia = competenciaMes(row.dataPC);
+    if(row.aduana) row.foiAduana = true;
+    if(row.status === 'Finalizado'){ row.bucket = 'finalizados'; return; }
+    if(row.aduana){ row.bucket = 'aduana'; if(row.status !== 'Faturar') row.status = 'Aduana'; return; }
+
+    /* IMPO automático: só clientes com regra de aduana,
+       fora da cidade de aduana, em posição Brasil,
+       e quando o REMETENTE é EX ou já saiu da aduana */
+    if(
+      hasPaga(row) &&
+      !row.aduana &&
+      isInBrazil(row.posicao) &&
+      !isAduanaPosition(row.posicao) &&
+      (isUFEx(row.ufRem) || row.foiAduana)
+    ){
+      row.bucket = 'alertaInt';
+      if(row.status === 'Aduana') row.status = 'Faturar';
+      return;
+    }
+
+    /* EXPO automático: clientes da lista expo com DESTINATÁRIO EX */
+    if(hasExpo(row) && isUFEx(row.ufDest)){
+      row.bucket = 'alertaExpo';
+      return;
+    }
+
+    /* Faturar manual:
+       - DESTINATÁRIO EX => alertaExpo
+       - senão, REMETENTE EX => alertaInt impo
+       - sem EX => alertaNac
+    */
+    if(row.status === 'Faturar'){
+      if(isUFEx(row.ufDest)) row.bucket = 'alertaExpo';
+      else if(isUFEx(row.ufRem)) row.bucket = 'alertaInt';
+      else row.bucket = 'alertaNac';
+      return;
+    }
+
+    /* Clientes de alerta automático:
+       - sem EX => alerta nacional
+       - com EX não sobem sozinhos; só entram quando marcar Faturar,
+         exceto os clientes da lista expo, que podem subir automaticamente para expo.
+    */
+    if(row.alerta){
+      if(!isUFEx(row.ufRem) && !isUFEx(row.ufDest)){
+        row.bucket = 'alertaNac';
+        return;
+      }
+    }
+    row.bucket = 'ativo';
+    if(!['Coleta','AG Nota','Aduana','Faturar','Finalizado'].includes(row.status)) row.status = 'Coleta';
+  });
+}
+function currentSets(){ reclassify(); return { ativo: state.rows.filter(r => r.bucket === 'ativo'), aduana: state.rows.filter(r => r.bucket === 'aduana'), alertaNac: state.rows.filter(r => r.bucket === 'alertaNac'), alertaInt: state.rows.filter(r => r.bucket === 'alertaInt'), alertaExpo: state.rows.filter(r => r.bucket === 'alertaExpo') }; }
+function fillSelect(el, items, current=''){ const keep = current || el.value || ''; el.innerHTML = '<option value="">Todos</option>' + [...new Set(items.filter(Boolean))].sort().map(v => `<option value="${String(v).replace(/"/g,'&quot;')}">${v}</option>`).join(''); if([...el.options].some(o => o.value === keep)) el.value = keep; }
+function filterRows(rows, {q='', client='', status='', ufOrigem='', ufDestino=''}={}){ const text = norm(q); return rows.filter(r => { if(client && norm(r.pagador) !== norm(client)) return false; if(status && r.status !== status) return false; if(ufOrigem && norm(r.ufRem) !== norm(ufOrigem)) return false; if(ufDestino && norm(r.ufDest) !== norm(ufDestino)) return false; const hay = norm([r.cavalo,r.pagador,r.posicao,r.motorista,r.referencia,r.talhao,r.destinatario,r.remetente].join(' ')); return !text || hay.includes(text); }); }
+function statusSelect(row, fromFinalizados=false){ const opts = ['Coleta','AG Nota','Aduana','Faturar','Finalizado']; return `<select onchange="alterarStatus('${encodeURIComponent(row.id)}', this.value, ${fromFinalizados ? 'true' : 'false'})">${opts.map(s => `<option value="${s}" ${row.status===s?'selected':''}>${s}</option>`).join('')}</select>`; }
+function rowButtons(row, fromFinalizados=false){ if(fromFinalizados){ return `<div class="rowActions"><button class="mini btn-green" onclick="reabrirRegistro('${encodeURIComponent(row.id)}')">Reabrir</button></div>`; } return `<div class="rowActions"><button class="mini btn-fat" onclick="marcarFaturar('${encodeURIComponent(row.id)}')">Faturar</button><button class="mini btn-fin" onclick="marcarFinalizado('${encodeURIComponent(row.id)}')">Finalizado</button></div>`; }
+function columns(includeFrete=false, fromFinalizados=false){
+  const cols = [['Cavalo', r => r.cavalo || '-'], ['Data PC', r => `${r.dataPC || '-'}<div class="small">Filial ${r.filial || '-'} | PV ${r.pv || '-'}</div>`], ['Posição', r => r.posicao || '-'], ['Pagador', r => `${r.pagador || '-'}${r.alerta ? '<div class="clientTag">cliente alerta</div>' : ''}`], ['Remetente / UF', r => `${r.remetente || '-'}<div class="small">UF ${r.ufRem || '-'}</div>`], ['Destinatário / UF', r => `${r.destinatario || '-'}<div class="small">UF ${r.ufDest || '-'}</div>`], ['Motorista', r => r.motorista || '-'], ['Talhão', r => r.talhao || '-'], ['Referência', r => r.referencia || '-']];
+  if(includeFrete) cols.push(['Frete', r => money(r.frete || 0)]);
+  cols.push(['Status', r => statusSelect(r, fromFinalizados)]);
+  cols.push(['Ações', r => rowButtons(r, fromFinalizados)]);
+  return cols;
+}
+function renderTable(el, rows, includeFrete=false, fromFinalizados=false){
+  const cols = columns(includeFrete, fromFinalizados);
+  el.innerHTML = `<thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(r => `<tr>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" style="text-align:center;color:#9bb0df">Nenhum registro encontrado.</td></tr>`}</tbody>`;
+}
+function unique(rows, key){ return [...new Set(rows.map(r => r[key]).filter(Boolean))]; }
+
+function renderMonthsPanel(){
+  const box = mesesBox;
+  const compet = {};
+  state.rows.forEach(r => { if(r.competencia){ compet[r.competencia] = (compet[r.competencia] || 0) + 1; } });
+  state.finalizados.forEach(r => { if(r.competencia){ compet[r.competencia] = compet[r.competencia] || 0; } });
+  const months = Object.keys(compet).sort();
+  box.innerHTML = '';
+  if(!months.length){ box.innerHTML = '<div class="small">Ainda não há competências carregadas.</div>'; return; }
+  months.forEach(m => {
+    const abertos = state.rows.filter(r => r.competencia === m).length;
+    const finalizados = state.finalizados.filter(r => r.competencia === m).length;
+    const pode = abertos === 0;
+    const div = document.createElement('div');
+    div.className = 'monthCard';
+    div.innerHTML = `<div><div style="font-size:30px;font-weight:900;line-height:1">${m}</div><div class="small" style="margin-top:8px">Abertos: ${abertos} | Finalizados: ${finalizados}</div></div><div class="monthStatus ${pode ? 'ok' : 'warn'}">${pode ? 'Sem PV em aberto. Pode zerar.' : 'Ainda com PV em aberto'}</div><div class="monthActions"><button class="mini" onclick="exportarCompetencia('${m}')">Exportar</button><button class="mini btn-red" ${pode ? '' : 'disabled'} onclick="zerarCompetenciaSupabase('${m}')">Zerar Supabase</button></div>`;
+    box.appendChild(div);
+  });
+}
+window.exportarCompetencia = function(m){
+  const payload = { competencia:m, ativos:state.rows.filter(r => r.competencia === m), finalizados:state.finalizados.filter(r => r.competencia === m) };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `competencia_${m}.json`; a.click(); URL.revokeObjectURL(a.href);
+};
+window.zerarCompetenciaSupabase = async function(m){
+  if(!state.supabase){ alert('Preencha a conexão no HTML.'); return; }
+  if(!confirm(`Zerar a competência ${m} na Supabase?`)) return;
+  const [year, month] = m.split('-');
+  const { error } = await state.supabase.rpc('archive_and_clear_month', { p_month: `${year}-${month}-01` });
+  if(error){ alert('Erro ao zerar mês: ' + error.message); return; }
+  await carregarDaSupabase();
+  alert(`Competência ${m} zerada na Supabase.`);
+};
+
+function renderConfigEditors(){
+  if(!Array.isArray(state.config.aduanas)) state.config.aduanas = [];
+  if(!Array.isArray(state.config.alerta)) state.config.alerta = [];
+  if(!Array.isArray(state.config.expo)) state.config.expo = [];
+  if(!Array.isArray(state.config.paga)) state.config.paga = [];
+  if(!Array.isArray(state.config.fretes)) state.config.fretes = [];
+
+  aduanasBox.innerHTML = state.config.aduanas.map((v,i) => `<div class="cfgItem"><div>${v}</div><button class="xbtn btn-red" onclick="removeSimpleCfg('aduanas', ${i})">x</button></div>`).join('') || '<div class="small">Nenhuma aduana cadastrada.</div>';
+  alertasBox.innerHTML = state.config.alerta.map((v,i) => `<div class="cfgItem"><div>${v}</div><button class="xbtn btn-red" onclick="removeSimpleCfg('alerta', ${i})">x</button></div>`).join('') || '<div class="small">Nenhum cliente alerta cadastrado.</div>';
+  expoBox.innerHTML = state.config.expo.map((v,i) => `<div class="cfgItem"><div>${v}</div><button class="xbtn btn-red" onclick="removeSimpleCfg('expo', ${i})">x</button></div>`).join('') || '<div class="small">Nenhum cliente exportação cadastrado.</div>';
+  pagaBox.innerHTML = state.config.paga.map((v,i) => `<div class="cfgItem"><div>${v}</div><button class="xbtn btn-red" onclick="removeSimpleCfg('paga', ${i})">x</button></div>`).join('') || '<div class="small">Nenhum cliente com regra de aduana cadastrado.</div>';
+  fretesBox.innerHTML = state.config.fretes.map((f,i) => `<div class="cfgItem5"><div>${f.pagador || '-'}</div><div>${f.remetente || '-'}</div><div>${f.ufOrigem || '-'}</div><div>${f.ufDestino || '-'}</div><div>${money(f.frete || 0)}</div><button class="xbtn btn-red" onclick="removeFrete(${i})">x</button></div>`).join('') || '<div class="small">Nenhuma regra de frete cadastrada.</div>';
+}
+window.removeSimpleCfg = function(name, idx){ state.config[name].splice(idx,1); renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+window.removeFrete = function(idx){ state.config.fretes.splice(idx,1); renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+
+addAduana.onclick = () => { const v = novoAduana.value.trim(); if(!v) return; state.config.aduanas.push(v); novoAduana.value=''; renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+addAlerta.onclick = () => { const v = novoAlerta.value.trim(); if(!v) return; state.config.alerta.push(v); novoAlerta.value=''; renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+addExpo.onclick = () => { const v = novoExpo.value.trim(); if(!v) return; state.config.expo.push(v); novoExpo.value=''; renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+addPaga.onclick = () => { const v = novoPaga.value.trim(); if(!v) return; state.config.paga.push(v); novoPaga.value=''; renderConfigEditors(); saveLocal(); reclassify(); renderAll(true); };
+addFrete.onclick = () => {
+  const pagador = fPagador.value.trim(), remetente = fRemetente.value.trim(), ufOrigem = fUfOrigem.value.trim() || 'EX', ufDestino = fUfDestino.value.trim(), frete = Number(String(fFrete.value).replace(/\./g,'').replace(',','.')) || 0;
+  if(!pagador && !remetente && !ufDestino && !frete) return;
+  state.config.fretes.push({pagador, remetente, ufOrigem, ufDestino, frete});
+  fPagador.value=''; fRemetente.value=''; fUfOrigem.value='EX'; fUfDestino.value=''; fFrete.value='';
+  renderConfigEditors(); saveLocal(); reclassify(); renderAll(true);
+};
+btnSalvarCfg.onclick = () => {
+  state.config.aduanas = (state.config.aduanas || []).map(v => String(v).trim()).filter(Boolean);
+  state.config.alerta = (state.config.alerta || []).map(v => String(v).trim()).filter(Boolean);
+  state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
+  state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
+  saveLocal(); reclassify(); renderAll(true); alert('Configurações salvas.');
+};
+
+function renderAll(full=false){
+  const sets = currentSets();
+
+  cAtivas.textContent = sets.ativo.length;
+  cAduana.textContent = sets.aduana.length;
+  cNac.textContent = sets.alertaNac.length;
+  cInt.textContent = sets.alertaInt.length;
+  cExpo.textContent = sets.alertaExpo.length;
+
+  if(full){
+    fillSelect(clienteAtivo, unique(sets.ativo, 'pagador'), clienteAtivo.value);
+    fillSelect(ufOrigemAtivo, unique(sets.ativo, 'ufRem'), ufOrigemAtivo.value);
+    fillSelect(ufDestinoAtivo, unique(sets.ativo, 'ufDest'), ufDestinoAtivo.value);
+
+    fillSelect(clienteAduana, unique(sets.aduana, 'pagador'), clienteAduana.value);
+    fillSelect(ufDestinoAduana, unique(sets.aduana, 'ufDest'), ufDestinoAduana.value);
+
+    fillSelect(clienteNac, unique(sets.alertaNac, 'pagador'), clienteNac.value);
+    fillSelect(statusNac, unique(sets.alertaNac, 'status'), statusNac.value);
+    fillSelect(ufDestinoNac, unique(sets.alertaNac, 'ufDest'), ufDestinoNac.value);
+
+    fillSelect(clienteInt, unique(sets.alertaInt, 'pagador'), clienteInt.value);
+    fillSelect(statusInt, unique(sets.alertaInt, 'status'), statusInt.value);
+    fillSelect(ufDestinoInt, unique(sets.alertaInt, 'ufDest'), ufDestinoInt.value);
+
+    fillSelect(clienteExpo, unique(sets.alertaExpo, 'pagador'), clienteExpo.value);
+    fillSelect(statusExpo, unique(sets.alertaExpo, 'status'), statusExpo.value);
+    fillSelect(ufDestinoExpo, unique(sets.alertaExpo, 'ufDest'), ufDestinoExpo.value);
+  }
+
+  renderTable(tbAtivo, filterRows(sets.ativo, {q: buscaAtivo.value, client: clienteAtivo.value, ufOrigem: ufOrigemAtivo.value, ufDestino: ufDestinoAtivo.value}));
+  const adRows = filterRows(sets.aduana, {q: buscaAduana.value, client: clienteAduana.value, ufDestino: ufDestinoAduana.value});
+  renderTable(tbAduana, adRows, true);
+  renderTable(tbNac, filterRows(sets.alertaNac, {q: buscaNac.value, client: clienteNac.value, status: statusNac.value, ufDestino: ufDestinoNac.value}));
+  renderTable(tbInt, filterRows(sets.alertaInt, {q: buscaInt.value, client: clienteInt.value, status: statusInt.value, ufDestino: ufDestinoInt.value}));
+  renderTable(tbExpo, filterRows(sets.alertaExpo, {q: buscaExpo.value, client: clienteExpo.value, status: statusExpo.value, ufDestino: ufDestinoExpo.value}));
+  renderTable(tbFim, state.finalizados, false, true);
+
+  sumAduanaQtd.textContent = adRows.length;
+  sumAduanaFrete.textContent = money(adRows.reduce((a,b) => a + Number(b.frete||0), 0));
+
+  renderMonthsPanel();
+}
+[buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => renderAll(false)));
+
+function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ const t = (rows[i]||[]).map(x => norm(x)).join('|'); if(t.includes('REF') && t.includes('DATA PC') && t.includes('MOTORISTA')) return i; } return 0; }
+function parseExcelRows(matrix){
+  const header = detectHeaderRow(matrix);
+  const rows = matrix.slice(header + 1);
+  const oldMap = new Map(state.rows.map(r => [r.id, r]));
+  const finalSet = new Set(state.finalizados.map(r => r.id));
+  const fresh = [];
+  for(const r of rows){
+    if(!r || r.length < 10) continue;
+    const ref = String(r[0] || '').trim();
+    const dataPC = String(r[1] || '').trim();
+    const filial = String(r[2] || '').trim();
+    const pv = String(r[3] || '').trim();
+    if(!ref || !pv) continue;
+    const id = [ref, filial, pv].join('|');
+    if(finalSet.has(id)) continue;
+    const old = oldMap.get(id);
+    fresh.push({
+      id, ref, dataPC, filial, pv,
+      cavalo: String(r[6] ?? r[5] ?? '').trim(),
+      posicao: String(r[8] ?? '').trim(),
+      motorista: String(r[9] ?? '').trim(),
+      remetente: String(r[10] ?? '').trim(),
+      ufRem: String(r[11] ?? '').trim(),
+      destinatario: String(r[12] ?? '').trim(),
+      ufDest: String(r[13] ?? '').trim(),
+      pagador: String(r[14] ?? '').trim(),
+      talhao: String(r[15] ?? '').trim(),
+      referencia: String(r[16] ?? r[15] ?? '').trim(),
+      status: old?.status || 'Coleta',
+      foiAduana: old?.foiAduana || false
+    });
+  }
+  state.rows = fresh; reclassify(); saveLocal(); renderAll(true);
+}
+fileExcel.addEventListener('change', e => {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const data = new Uint8Array(ev.target.result);
+    const wb = XLSX.read(data, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const matrix = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+    parseExcelRows(matrix);
+  };
+  reader.readAsArrayBuffer(file); e.target.value = '';
+});
+
+window.alterarStatus = function(id, value, fromFinalizados=false){
+  id = decodeURIComponent(id);
+  if(fromFinalizados){
+    const idx = state.finalizados.findIndex(x => x.id === id);
+    if(idx < 0) return;
+    const row = state.finalizados[idx];
+    row.status = value;
+    if(value !== 'Finalizado'){ state.finalizados.splice(idx, 1); state.rows.unshift(row); reclassify(); }
+    saveLocalDebounced(); renderAll(false); return;
+  }
+  const row = state.rows.find(x => x.id === id);
+  if(!row) return;
+  row.status = value;
+  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); return; }
+  reclassify(); saveLocalDebounced(); renderAll(false);
+};
+window.marcarFaturar = id => alterarStatus(id, 'Faturar', false);
+window.marcarFinalizado = id => alterarStatus(id, 'Finalizado', false);
+window.reabrirRegistro = function(id){
+  id = decodeURIComponent(id);
+  const idx = state.finalizados.findIndex(x => x.id === id);
+  if(idx < 0) return;
+  const row = state.finalizados[idx];
+  row.status = 'Coleta';
+  state.finalizados.splice(idx, 1);
+  state.rows.unshift(row);
+  reclassify(); saveLocalDebounced(); renderAll(false);
+};
+btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
+
+btnExport.onclick = () => {
+  const blob = new Blob([JSON.stringify({rows: state.rows, finalizados: state.finalizados, config: state.config}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'painel_902_base.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+fileBase.addEventListener('change', e => {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const data = JSON.parse(ev.target.result);
+      state.rows = data.rows || [];
+      state.finalizados = data.finalizados || [];
+      if(data.config){
+        state.config = {
+          aduanas: data.config.aduanas || state.config.aduanas,
+          alerta: data.config.alerta || state.config.alerta,
+          expo: data.config.expo || [],
+          paga: data.config.paga || state.config.paga,
+          fretes: data.config.fretes || state.config.fretes
+        };
+      }
+      if(!Array.isArray(state.config.expo)) state.config.expo = [];
+      reclassify(); renderConfigEditors(); saveLocal(); renderAll(true);
+    }catch(err){ alert('JSON inválido.'); }
+  };
+  reader.readAsText(file); e.target.value = '';
+});
+
+function mapRowToDb(row){
+  return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
+}
+async function syncConfigsToSupabase(){
+  await state.supabase.from('config_aduanas').delete().neq('id',0);
+  await state.supabase.from('config_clientes_alerta').delete().neq('id',0);
+  await state.supabase.from('config_clientes_paga').delete().neq('id',0);
+  await state.supabase.from('config_frete_padrao').delete().neq('id',0);
+  if(state.config.aduanas.length) await state.supabase.from('config_aduanas').insert(state.config.aduanas.map(v => ({descricao:v, ativo:true})));
+  if(state.config.alerta.length) await state.supabase.from('config_clientes_alerta').insert(state.config.alerta.map(v => ({cliente:v, ativo:true})));
+  if(state.config.paga.length) await state.supabase.from('config_clientes_paga').insert(state.config.paga.map(v => ({cliente:v, ativo:true})));
+  if(state.config.fretes.length) await state.supabase.from('config_frete_padrao').insert(state.config.fretes.map(v => ({pagador:v.pagador || null, remetente:v.remetente || null, uf_origem:v.ufOrigem || null, uf_destino:v.ufDestino || null, frete:Number(v.frete || 0), ativo:true})));
+}
+async function syncToSupabase(){
+  if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
+  setStatusText('Supabase: sincronizando...');
+  const ativosPayload = state.rows.map(mapRowToDb);
+  const finaisPayload = state.finalizados.map(r => ({...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
+  let error = null;
+  if(ativosPayload.length){ const res = await state.supabase.from('pcs_ativas').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
+  if(finaisPayload.length){ const res = await state.supabase.from('pcs_finalizadas').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
+  if(!error){ await syncConfigsToSupabase(); await state.supabase.rpc('recalculate_month_control'); }
+  if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
+  setStatusText('Supabase: sincronização concluída'); alert('Sincronização concluída.');
+}
+async function carregarDaSupabase(){
+  if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
+  setStatusText('Supabase: carregando...');
+  const a = await state.supabase.from('pcs_ativas').select('*').order('updated_at', {ascending:false});
+  const f = await state.supabase.from('pcs_finalizadas').select('*').order('updated_at', {ascending:false});
+  if(a.error || f.error){ setStatusText('Supabase: erro ao carregar'); alert((a.error || f.error).message); return; }
+  state.rows = (a.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:d.status || 'Coleta', foiAduana:!!d.foi_aduana}));
+  state.finalizados = (f.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:'Finalizado', foiAduana:!!d.foi_aduana}));
+  const cfgA = await state.supabase.from('config_aduanas').select('descricao').eq('ativo', true);
+  const cfgB = await state.supabase.from('config_clientes_alerta').select('cliente').eq('ativo', true);
+  const cfgC = await state.supabase.from('config_clientes_paga').select('cliente').eq('ativo', true);
+  const cfgD = await state.supabase.from('config_frete_padrao').select('*').eq('ativo', true);
+  if(!cfgA.error && cfgA.data) state.config.aduanas = cfgA.data.map(x => x.descricao);
+  if(!cfgB.error && cfgB.data) state.config.alerta = cfgB.data.map(x => x.cliente);
+  if(!cfgC.error && cfgC.data) state.config.paga = cfgC.data.map(x => x.cliente);
+  if(!cfgD.error && cfgD.data) state.config.fretes = cfgD.data.map(x => ({pagador:x.pagador || '', remetente:x.remetente || '', ufOrigem:x.uf_origem || '', ufDestino:x.uf_destino || '', frete:x.frete || 0}));
+  reclassify(); renderConfigEditors(); saveLocal(); renderAll(true); setStatusText('Supabase: dados carregados');
+}
+btnSyncSupabase.onclick = syncToSupabase;
+btnCarregarSupabase.onclick = carregarDaSupabase;
+
+loadLocal();
+initSupabase();
+renderConfigEditors();
+reclassify();
+renderAll();
+</script>
+</body>
+</html>
+
+
+<style>
+#addFrete{
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  min-width:34px;
+  height:30px;
+  padding:0;
+  margin:0;
+  flex-shrink:0;
+  z-index:3;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+.cfgInputLine5{
+  overflow:visible;
+}
+</style>

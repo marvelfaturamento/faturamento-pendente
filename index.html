@@ -197,7 +197,7 @@
   <aside class="side">
     <div class="brand">
       <h1>Painel 902</h1>
-      <p>Versão estável com uma única tabela na Supabase, auto-sync e tempo real.</p>
+      <p>Versão estável com uma única tabela na Supabase, auto-sync, tempo real e alerta nacional automático só pela configuração.</p>
     </div>
     <button class="navbtn active" data-tab="ativo">Painel Ativo</button>
     <button class="navbtn" data-tab="agNota">Ag nota</button>
@@ -610,9 +610,16 @@ document.addEventListener('click', (e) => {
 function isAduanaPosition(pos){ const t = norm(pos); return state.config.aduanas.some(x => t.includes(norm(x))); }
 function isInBrazil(pos){ return norm(pos).includes('BRASIL'); }
 function isUFEx(v){ const t = norm(v); return t === 'EX' || t === 'UF EX' || t.endsWith(' EX') || t.startsWith('EX '); }
-function hasAlert(row){ return state.config.alerta.some(x => norm(row.pagador).includes(norm(x))); }
-function hasExpo(row){ return state.config.expo.some(x => norm(row.pagador).includes(norm(x))); }
-function hasPaga(row){ return state.config.paga.some(x => norm(row.pagador).includes(norm(x))); }
+function startsWithCfg(value, cfgList){
+  const v = norm(value);
+  return cfgList.some(x => {
+    const c = norm(x);
+    return c && (v === c || v.startsWith(c + ' '));
+  });
+}
+function hasAlert(row){ return startsWithCfg(row.pagador, state.config.alerta); }
+function hasExpo(row){ return startsWithCfg(row.pagador, state.config.expo); }
+function hasPaga(row){ return startsWithCfg(row.pagador, state.config.paga); }
 function hasCheckpointRule(row){
   return (state.config.checkpoints || []).find(cp => {
     const clienteOk = norm(row.pagador).includes(norm(cp.cliente));
@@ -703,7 +710,7 @@ function reclassify(){
        - checkpoint só libera depois de sair da cidade
        - cliente expo + destino EX => alertaExpo
        - qualquer caso com origem EX => alertaInt
-       - cliente da lista alerta nacional sem EX => alertaNac
+       - sem EX => alertaNac
        - demais casos ficam no ativo
     */
     if(row.status === 'Faturar'){
@@ -713,14 +720,15 @@ function reclassify(){
       }
       else if(hasExpo(row) && isUFEx(row.ufDest)) row.bucket = 'alertaExpo';
       else if(isUFEx(row.ufRem)) row.bucket = 'alertaInt';
-      else if(row.alerta && !isUFEx(row.ufRem) && !isUFEx(row.ufDest)) row.bucket = 'alertaNac';
+      else if(!isUFEx(row.ufRem) && !isUFEx(row.ufDest)) row.bucket = 'alertaNac';
       else row.bucket = 'ativo';
       return;
     }
 
     /* Clientes de alerta automático:
-       - só clientes da lista alerta nacional entram aqui
+       - SOMENTE clientes da lista "Clientes alerta nacional" entram automaticamente
        - e apenas quando não houver EX
+       - clientes fora dessa lista só entram no alerta nacional via ação manual (status = Faturar)
     */
     if(row.alerta){
       if(!isUFEx(row.ufRem) && !isUFEx(row.ufDest)){

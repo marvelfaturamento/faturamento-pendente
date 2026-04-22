@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel 902 Supabase Ajustado v4</title>
+  <title>Painel 902 Ajustado</title>
+  <link rel="icon" href="data:,">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -36,7 +37,7 @@
     .cfgInputLine5 .field:nth-child(4){flex:0 0 60px;min-width:60px;max-width:60px}
     .cfgInputLine5 .field:nth-child(5){flex:0 0 110px;min-width:110px;max-width:110px}
 
-    .cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+    .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
     .cardBtn{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#15275c,#0f1d43);cursor:pointer;text-align:left}
     .cardBtn .k{font-size:11px;color:var(--muted)}
     .cardBtn .v{font-size:24px;font-weight:900;line-height:1;margin:5px 0}
@@ -160,7 +161,6 @@
     }
     .ok{color:#8cf1ba}.warn{color:#ffd7a7}
     .supastatus{font-size:11px;color:var(--muted)}
-    @media (max-width:1450px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.cfgCols{grid-template-columns:1fr 1fr}}
     @media (max-width:1350px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.cfgCols{grid-template-columns:1fr 1fr}}
     @media (max-width:1180px){
       .cfgCols{grid-template-columns:1fr}
@@ -178,7 +178,6 @@
       <p>Versão ajustada para Supabase com controle mensal e configurações mais discretas.</p>
     </div>
     <button class="navbtn active" data-tab="ativo">Painel Ativo</button>
-    <button class="navbtn" data-tab="agNota">Ag nota</button>
     <button class="navbtn" data-tab="aduana">Aduana</button>
     <button class="navbtn" data-tab="alertaNac">Clientes alerta nacional</button>
     <button class="navbtn" data-tab="alertaInt">Clientes alerta internacional impo</button>
@@ -191,7 +190,7 @@
     <div class="topbar">
       <div>
         <div class="title" id="pageTitle">Painel Ativo</div>
-        <div class="supastatus" id="supabaseStatus">Supabase: pronta para sincronizar</div>
+        <div class="supastatus" id="supabaseStatus">Supabase: pronta</div>
       </div>
       <div class="actions">
         <label class="filebtn">Importar Excel 902<input id="fileExcel" type="file" accept=".xls,.xlsx,.csv" hidden></label>
@@ -204,7 +203,6 @@
 
     <div class="cards">
       <button class="cardBtn" data-open="ativo"><div class="k">PCs ativas</div><div class="v" id="cAtivas">0</div><div class="k">No painel principal</div></button>
-      <button class="cardBtn" data-open="agNota"><div class="k">Ag nota</div><div class="v" id="cAg">0</div><div class="k" id="cAgFrete">R$ 0,00 em fretes</div></button>
       <button class="cardBtn" data-open="aduana"><div class="k">Em aduana</div><div class="v" id="cAduana">0</div><div class="k">Clientes com regra de aduana</div></button>
       <button class="cardBtn" data-open="alertaNac"><div class="k">Alerta nacional</div><div class="v" id="cNac">0</div><div class="k">UF destino diferente de EX</div></button>
       <button class="cardBtn" data-open="alertaInt"><div class="k">Alerta internacional impo</div><div class="v" id="cInt">0</div><div class="k">UF EX ou saída de aduana</div></button>
@@ -222,22 +220,7 @@
       <div class="tableWrap"><table id="tbAtivo"></table></div>
     </section>
 
-    
-    <section id="tab-agNota" class="panel tab hidden">
-      <div class="filters" style="grid-template-columns:1.5fr 1fr 1fr">
-        <div class="field"><small>Busca</small><input id="buscaAg" placeholder="Cavalo, cliente, posição..." /></div>
-        <div class="field"><small>Cliente</small><select id="clienteAg"><option value="">Todos</option></select></div>
-        <div class="field"><small>UF destino</small><select id="ufDestinoAg"><option value="">Todas</option></select></div>
-      </div>
-      <h3 class="sectionTitle">Ag nota</h3>
-      <div class="summaryLine">
-        <div>Total de casos: <strong id="sumAgQtd">0</strong></div>
-        <div>Total de frete padrão: <strong id="sumAgFrete">R$ 0,00</strong></div>
-      </div>
-      <div class="tableWrap"><table id="tbAg"></table></div>
-    </section>
-
-<section id="tab-aduana" class="panel tab hidden">
+    <section id="tab-aduana" class="panel tab hidden">
       <div class="filters" style="grid-template-columns:1.5fr 1fr 1fr">
         <div class="field"><small>Busca</small><input id="buscaAduana" placeholder="Cavalo, cliente, posição..." /></div>
         <div class="field"><small>Cliente</small><select id="clienteAduana"><option value="">Todos</option></select></div>
@@ -500,7 +483,7 @@ function openTab(tab){
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-'+tab).classList.remove('hidden');
   document.querySelectorAll('.navbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  const labels = {ativo:'Painel Ativo', agNota:'Ag nota', aduana:'Aduana', alertaNac:'Clientes alerta nacional', alertaInt:'Clientes alerta internacional impo', alertaExpo:'Clientes alerta internacional expo', finalizados:'Finalizados', config:'Configurações'};
+  const labels = {ativo:'Painel Ativo', aduana:'Aduana', alertaNac:'Clientes alerta nacional', alertaInt:'Clientes alerta internacional impo', alertaExpo:'Clientes alerta internacional expo', finalizados:'Finalizados', config:'Configurações'};
   pageTitle.textContent = labels[tab];
   renderAll(true);
 }
@@ -542,18 +525,25 @@ function reclassify(){
     if(checkpointRule && rowInCheckpointCity(row, checkpointRule)) row.passouCheckpoint = true;
     if(row.aduana) row.foiAduana = true;
     if(row.status === 'Finalizado'){ row.bucket = 'finalizados'; return; }
+    if(row.aduana){ row.bucket = 'aduana'; if(row.status !== 'Faturar') row.status = 'Aduana'; return; }
 
-    const elegivelAgNotaAduana = hasPaga(row) && isUFEx(row.ufRem);
-    const elegivelAgNotaCheckpoint = !!checkpointRule && isUFEx(row.ufRem);
-
-    if(row.aduana){
-      row.bucket = 'aduana';
-      if(row.status !== 'Faturar') row.status = 'Aduana';
+    /* IMPO automático: só clientes com regra de aduana,
+       fora da cidade de aduana, em posição Brasil,
+       e quando o REMETENTE é EX ou já saiu da aduana */
+    if(
+      hasPaga(row) &&
+      !row.aduana &&
+      isInBrazil(row.posicao) &&
+      !isAduanaPosition(row.posicao) &&
+      (isUFEx(row.ufRem) || row.foiAduana)
+    ){
+      row.bucket = 'alertaInt';
+      if(row.status === 'Aduana') row.status = 'Faturar';
       return;
     }
 
-    /* Checkpoint especial: enquanto estiver na cidade checkpoint fica em Aduana;
-       depois que sair vai para alerta internacional impo. Antes de chegar, fica em Ag nota. */
+    /* Regra especial por checkpoint: em Varginha fica em Aduana.
+       Depois que sair de Varginha, vai para o alerta definido. */
     if(checkpointRule){
       if(rowInCheckpointCity(row, checkpointRule)){
         row.bucket = 'aduana';
@@ -565,32 +555,21 @@ function reclassify(){
         if(row.status === 'Aduana') row.status = 'Faturar';
         return;
       }
-      if(elegivelAgNotaCheckpoint && !row.passouCheckpoint){
-        row.bucket = 'agNota';
-        if(!['Coleta','AG Nota','Aduana','Faturar','Finalizado'].includes(row.status) || row.status === 'Aduana') row.status = 'AG Nota';
+    }
+
+    /* Checkpoint especial: ex. Minerva em Varginha fica em Aduana.
+       Só depois de sair de Varginha vai para o alerta definido. */
+    if(checkpointRule){
+      if(rowInCheckpointCity(row, checkpointRule)){
+        row.bucket = 'aduana';
+        if(row.status !== 'Faturar') row.status = 'Aduana';
         return;
       }
-    }
-
-    /* Fluxo aduana normal:
-       - se já está em cidade do Brasil fora das marcações de aduana => alerta internacional
-       - se ainda não chegou nessa etapa => Ag nota */
-    if(
-      hasPaga(row) &&
-      isUFEx(row.ufRem) &&
-      !row.aduana &&
-      isInBrazil(row.posicao) &&
-      !isAduanaPosition(row.posicao)
-    ){
-      row.bucket = 'alertaInt';
-      if(row.status === 'Aduana' || row.status === 'AG Nota') row.status = 'Faturar';
-      return;
-    }
-
-    if(elegivelAgNotaAduana && !row.foiAduana){
-      row.bucket = 'agNota';
-      if(!['Coleta','AG Nota','Aduana','Faturar','Finalizado'].includes(row.status) || row.status === 'Aduana') row.status = 'AG Nota';
-      return;
+      if(row.passouCheckpoint && !rowInCheckpointCity(row, checkpointRule)){
+        row.bucket = checkpointRule.destinoBucket || 'alertaInt';
+        if(row.status === 'Aduana') row.status = 'Faturar';
+        return;
+      }
     }
 
     /* EXPO automático: clientes da lista expo com DESTINATÁRIO EX */
@@ -630,7 +609,7 @@ function reclassify(){
     if(!['Coleta','AG Nota','Aduana','Faturar','Finalizado'].includes(row.status)) row.status = 'Coleta';
   });
 }
-function currentSets(){ reclassify(); return { ativo: state.rows.filter(r => r.bucket === 'ativo'), agNota: state.rows.filter(r => r.bucket === 'agNota'), aduana: state.rows.filter(r => r.bucket === 'aduana'), alertaNac: state.rows.filter(r => r.bucket === 'alertaNac'), alertaInt: state.rows.filter(r => r.bucket === 'alertaInt'), alertaExpo: state.rows.filter(r => r.bucket === 'alertaExpo') }; }
+function currentSets(){ reclassify(); return { ativo: state.rows.filter(r => r.bucket === 'ativo'), aduana: state.rows.filter(r => r.bucket === 'aduana'), alertaNac: state.rows.filter(r => r.bucket === 'alertaNac'), alertaInt: state.rows.filter(r => r.bucket === 'alertaInt'), alertaExpo: state.rows.filter(r => r.bucket === 'alertaExpo') }; }
 function fillSelect(el, items, current=''){ const keep = current || el.value || ''; el.innerHTML = '<option value="">Todos</option>' + [...new Set(items.filter(Boolean))].sort().map(v => `<option value="${String(v).replace(/"/g,'&quot;')}">${v}</option>`).join(''); if([...el.options].some(o => o.value === keep)) el.value = keep; }
 function filterRows(rows, {q='', client='', status='', ufOrigem='', ufDestino=''}={}){ const text = norm(q); return rows.filter(r => { if(client && norm(r.pagador) !== norm(client)) return false; if(status && r.status !== status) return false; if(ufOrigem && norm(r.ufRem) !== norm(ufOrigem)) return false; if(ufDestino && norm(r.ufDest) !== norm(ufDestino)) return false; const hay = norm([r.cavalo,r.pagador,r.posicao,r.motorista,r.referencia,r.talhao,r.destinatario,r.remetente].join(' ')); return !text || hay.includes(text); }); }
 function statusSelect(row, fromFinalizados=false){ const opts = ['Coleta','AG Nota','Aduana','Faturar','Finalizado']; return `<select onchange="alterarStatus('${encodeURIComponent(row.id)}', this.value, ${fromFinalizados ? 'true' : 'false'})">${opts.map(s => `<option value="${s}" ${row.status===s?'selected':''}>${s}</option>`).join('')}</select>`; }
@@ -675,7 +654,10 @@ window.zerarCompetenciaSupabase = async function(m){
   if(!state.supabase){ alert('Preencha a conexão no HTML.'); return; }
   if(!confirm(`Zerar a competência ${m} na Supabase?`)) return;
   const [year, month] = m.split('-');
-  const { error } = await state.supabase.rpc('archive_and_clear_month', { p_month: `${year}-${month}-01` });
+  const monthKey = `${year}-${month}-01`;
+  const del1 = await state.supabase.from('painel_902').delete().eq('competencia_mes', monthKey);
+  const del2 = await state.supabase.from('painel_902_finalizados').delete().eq('competencia_mes', monthKey);
+  const error = del1.error || del2.error;
   if(error){ alert('Erro ao zerar mês: ' + error.message); return; }
   await carregarDaSupabase();
   alert(`Competência ${m} zerada na Supabase.`);
@@ -743,8 +725,6 @@ function renderAll(full=false){
   const sets = currentSets();
 
   cAtivas.textContent = sets.ativo.length;
-  cAg.textContent = sets.agNota.length;
-  cAgFrete.textContent = `${money(sets.agNota.reduce((a,b) => a + Number(b.frete||0), 0))} em fretes`;
   cAduana.textContent = sets.aduana.length;
   cNac.textContent = sets.alertaNac.length;
   cInt.textContent = sets.alertaInt.length;
@@ -754,9 +734,6 @@ function renderAll(full=false){
     fillSelect(clienteAtivo, unique(sets.ativo, 'pagador'), clienteAtivo.value);
     fillSelect(ufOrigemAtivo, unique(sets.ativo, 'ufRem'), ufOrigemAtivo.value);
     fillSelect(ufDestinoAtivo, unique(sets.ativo, 'ufDest'), ufDestinoAtivo.value);
-
-    fillSelect(clienteAg, unique(sets.agNota, 'pagador'), clienteAg.value);
-    fillSelect(ufDestinoAg, unique(sets.agNota, 'ufDest'), ufDestinoAg.value);
 
     fillSelect(clienteAduana, unique(sets.aduana, 'pagador'), clienteAduana.value);
     fillSelect(ufDestinoAduana, unique(sets.aduana, 'ufDest'), ufDestinoAduana.value);
@@ -775,8 +752,6 @@ function renderAll(full=false){
   }
 
   renderTable(tbAtivo, filterRows(sets.ativo, {q: buscaAtivo.value, client: clienteAtivo.value, ufOrigem: ufOrigemAtivo.value, ufDestino: ufDestinoAtivo.value}));
-  const agRows = filterRows(sets.agNota, {q: buscaAg.value, client: clienteAg.value, ufDestino: ufDestinoAg.value});
-  renderTable(tbAg, agRows, true);
   const adRows = filterRows(sets.aduana, {q: buscaAduana.value, client: clienteAduana.value, ufDestino: ufDestinoAduana.value});
   renderTable(tbAduana, adRows, true);
   renderTable(tbNac, filterRows(sets.alertaNac, {q: buscaNac.value, client: clienteNac.value, status: statusNac.value, ufDestino: ufDestinoNac.value}));
@@ -784,13 +759,11 @@ function renderAll(full=false){
   renderTable(tbExpo, filterRows(sets.alertaExpo, {q: buscaExpo.value, client: clienteExpo.value, status: statusExpo.value, ufDestino: ufDestinoExpo.value}));
   renderTable(tbFim, state.finalizados, false, true);
 
-  sumAgQtd.textContent = agRows.length;
-  sumAgFrete.textContent = money(agRows.reduce((a,b) => a + Number(b.frete||0), 0));
   sumAduanaQtd.textContent = adRows.length;
   sumAduanaFrete.textContent = money(adRows.reduce((a,b) => a + Number(b.frete||0), 0));
   renderMonthsPanel();
 }
-[buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAg,clienteAg,ufDestinoAg,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => renderAll(false)));
+[buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => renderAll(false)));
 
 function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ const t = (rows[i]||[]).map(x => norm(x)).join('|'); if(t.includes('REF') && t.includes('DATA PC') && t.includes('MOTORISTA')) return i; } return 0; }
 function parseExcelRows(matrix){
@@ -798,7 +771,7 @@ function parseExcelRows(matrix){
   const rows = matrix.slice(header + 1);
   const oldMap = new Map(state.rows.map(r => [r.id, r]));
   const finalSet = new Set(state.finalizados.map(r => r.id));
-  const fresh = [];
+  const freshMap = new Map();
   for(const r of rows){
     if(!r || r.length < 10) continue;
     const ref = String(r[0] || '').trim();
@@ -902,56 +875,76 @@ fileBase.addEventListener('change', e => {
 });
 
 function mapRowToDb(row){
-  return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
+  return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, passou_checkpoint: !!row.passouCheckpoint, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
 }
 async function syncConfigsToSupabase(){
   await state.supabase.from('config_aduanas').delete().neq('id',0);
   await state.supabase.from('config_clientes_alerta').delete().neq('id',0);
   await state.supabase.from('config_clientes_paga').delete().neq('id',0);
+  await state.supabase.from('config_clientes_expo').delete().neq('id',0);
   await state.supabase.from('config_frete_padrao').delete().neq('id',0);
+  await state.supabase.from('config_checkpoint').delete().neq('id',0);
   if(state.config.aduanas.length) await state.supabase.from('config_aduanas').insert(state.config.aduanas.map(v => ({descricao:v, ativo:true})));
   if(state.config.alerta.length) await state.supabase.from('config_clientes_alerta').insert(state.config.alerta.map(v => ({cliente:v, ativo:true})));
   if(state.config.paga.length) await state.supabase.from('config_clientes_paga').insert(state.config.paga.map(v => ({cliente:v, ativo:true})));
+  if(state.config.expo.length) await state.supabase.from('config_clientes_expo').insert(state.config.expo.map(v => ({cliente:v, ativo:true})));
   if(state.config.fretes.length) await state.supabase.from('config_frete_padrao').insert(state.config.fretes.map(v => ({pagador:v.pagador || null, remetente:v.remetente || null, uf_origem:v.ufOrigem || null, uf_destino:v.ufDestino || null, frete:Number(v.frete || 0), ativo:true})));
+  if((state.config.checkpoints || []).length) await state.supabase.from('config_checkpoint').insert((state.config.checkpoints || []).map(v => ({cliente:v.cliente || null, cidade:v.cidade || null, uf_origem:v.ufOrigem || 'EX', destino_bucket:v.destinoBucket || 'alertaInt'})));
 }
 async function syncToSupabase(){
   if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
   setStatusText('Supabase: sincronizando...');
-  const ativosPayload = state.rows.map(mapRowToDb);
-  const finaisPayload = state.finalizados.map(r => ({...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
+  const ativosMap = new Map();
+  state.rows.forEach(r => {
+    ativosMap.set(r.id, mapRowToDb(r));
+  });
+  const ativosPayload = [...ativosMap.values()];
+
+  const finaisMap = new Map();
+  state.finalizados.forEach(r => {
+    finaisMap.set(r.id, {...mapRowToDb(r), finalizado_em: new Date().toISOString()});
+  });
+  const finaisPayload = [...finaisMap.values()];
   let error = null;
-  if(ativosPayload.length){ const res = await state.supabase.from('pcs_ativas').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
-  if(finaisPayload.length){ const res = await state.supabase.from('pcs_finalizadas').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
-  if(!error){ await syncConfigsToSupabase(); await state.supabase.rpc('recalculate_month_control'); }
+  if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
+  if(finaisPayload.length){ const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
+  if(!error){ await syncConfigsToSupabase(); }
   if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
   setStatusText('Supabase: sincronização concluída'); alert('Sincronização concluída.');
 }
 async function carregarDaSupabase(){
   if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
   setStatusText('Supabase: carregando...');
-  const a = await state.supabase.from('pcs_ativas').select('*').order('updated_at', {ascending:false});
-  const f = await state.supabase.from('pcs_finalizadas').select('*').order('updated_at', {ascending:false});
+  const a = await state.supabase.from('painel_902').select('*').order('updated_at', {ascending:false});
+  const f = await state.supabase.from('painel_902_finalizados').select('*').order('updated_at', {ascending:false});
   if(a.error || f.error){ setStatusText('Supabase: erro ao carregar'); alert((a.error || f.error).message); return; }
-  state.rows = (a.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:d.status || 'Coleta', foiAduana:!!d.foi_aduana}));
-  state.finalizados = (f.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:'Finalizado', foiAduana:!!d.foi_aduana}));
+  state.rows = (a.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:d.status || 'Coleta', foiAduana:!!d.foi_aduana, passouCheckpoint:!!d.passou_checkpoint}));
+  state.finalizados = (f.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:'Finalizado', foiAduana:!!d.foi_aduana, passouCheckpoint:!!d.passou_checkpoint}));
   const cfgA = await state.supabase.from('config_aduanas').select('descricao').eq('ativo', true);
   const cfgB = await state.supabase.from('config_clientes_alerta').select('cliente').eq('ativo', true);
   const cfgC = await state.supabase.from('config_clientes_paga').select('cliente').eq('ativo', true);
   const cfgD = await state.supabase.from('config_frete_padrao').select('*').eq('ativo', true);
+  const cfgE = await state.supabase.from('config_clientes_expo').select('cliente').eq('ativo', true);
+  const cfgF = await state.supabase.from('config_checkpoint').select('*');
   if(!cfgA.error && cfgA.data) state.config.aduanas = cfgA.data.map(x => x.descricao);
   if(!cfgB.error && cfgB.data) state.config.alerta = cfgB.data.map(x => x.cliente);
   if(!cfgC.error && cfgC.data) state.config.paga = cfgC.data.map(x => x.cliente);
   if(!cfgD.error && cfgD.data) state.config.fretes = cfgD.data.map(x => ({pagador:x.pagador || '', remetente:x.remetente || '', ufOrigem:x.uf_origem || '', ufDestino:x.uf_destino || '', frete:x.frete || 0}));
+  if(!cfgE.error && cfgE.data) state.config.expo = cfgE.data.map(x => x.cliente);
+  if(!cfgF.error && cfgF.data) state.config.checkpoints = cfgF.data.map(x => ({cliente:x.cliente || '', cidade:x.cidade || '', ufOrigem:x.uf_origem || 'EX', destinoBucket:x.destino_bucket || 'alertaInt'}));
   reclassify(); renderConfigEditors(); saveLocalDebounced(); renderAll(false); setStatusText('Supabase: dados carregados');
 }
 btnSyncSupabase.onclick = syncToSupabase;
 btnCarregarSupabase.onclick = carregarDaSupabase;
 
-loadLocal();
-initSupabase();
-renderConfigEditors();
-reclassify();
-renderAll();
+async function initApp(){
+  await loadLocal();
+  initSupabase();
+  renderConfigEditors();
+  reclassify();
+  renderAll(true);
+}
+initApp();
 </script>
 </body>
 </html>

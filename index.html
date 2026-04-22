@@ -938,8 +938,8 @@ async function syncToSupabase(){
   if(!error){ await syncConfigsToSupabase(); }
   if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
   await carregarDaSupabase();
-setStatusText('Supabase: sincronização concluída e painel recarregado');
-alert('Sincronização concluída.');
+  setStatusText('Supabase: sincronização concluída e painel recarregado');
+  alert('Sincronização concluída.');
 }
 async function carregarDaSupabase(){
   if(!state.supabase){
@@ -1034,12 +1034,13 @@ async function carregarDaSupabase(){
 
   renderConfigEditors();
   reclassify();
-
   await saveLocal();
-
   renderAll(true);
   setStatusText(`Supabase: ${state.rows.length} ativos e ${state.finalizados.length} finalizados carregados`);
 }
+btnSyncSupabase.onclick = syncToSupabase;
+btnCarregarSupabase.onclick = carregarDaSupabase;
+
 async function initApp(){
   await loadLocal();
   initSupabase();

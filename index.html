@@ -452,7 +452,6 @@ async function loadLocal(){
         expo: raw.config.expo || [],
         paga: raw.config.paga || state.config.paga,
         fretes: raw.config.fretes || state.config.fretes,
-        checkpoints: (raw.config.checkpoints || [{cliente:'MINERVA', cidade:'VARGINHA', ufOrigem:'EX', destinoBucket:'alertaInt'}]).map(c => ({cliente:(c.cliente||''), cidade:(c.cidade||''), ufOrigem:(c.ufOrigem || c.ufDestino || 'EX'), destinoBucket:(c.destinoBucket || 'alertaInt')})),
         checkpoints: (raw.config.checkpoints || [{cliente:'MINERVA', cidade:'VARGINHA', ufOrigem:'EX', destinoBucket:'alertaInt'}]).map(c => ({cliente:(c.cliente||''), cidade:(c.cidade||''), ufOrigem:(c.ufOrigem || c.ufDestino || 'EX'), destinoBucket:(c.destinoBucket || 'alertaInt')}))
       };
     }
@@ -792,7 +791,6 @@ function parseExcelRows(matrix){
       referencia: String(r[16] ?? r[15] ?? '').trim(),
       status: old?.status || 'Coleta',
       foiAduana: old?.foiAduana || false,
-      passouCheckpoint: old?.passouCheckpoint || false,
       passouCheckpoint: old?.passouCheckpoint || false
     });
   }
@@ -890,8 +888,8 @@ async function syncToSupabase(){
   const finaisPayload = state.finalizados.map(r => ({...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
   let error = null;
   if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
-  if(finaisPayload.length){ const res = await state.supabase.from('pcs_finalizadas').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
-  if(!error){ await syncConfigsToSupabase(); await state.supabase.rpc('recalculate_month_control'); }
+  if(finaisPayload.length){const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
+  if(!error){ await syncConfigsToSupabase(); }
   if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
   setStatusText('Supabase: sincronização concluída'); alert('Sincronização concluída.');
 }
@@ -899,7 +897,7 @@ async function carregarDaSupabase(){
   if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
   setStatusText('Supabase: carregando...');
   const a = await state.supabase.from('painel_902').select('*').order('updated_at', {ascending:false});
-  const f = await state.supabase.from('pcs_finalizadas').select('*').order('updated_at', {ascending:false});
+  const f = await state.supabase.from('painel_902_finalizados').select('*').order('updated_at', {ascending:false});
   if(a.error || f.error){ setStatusText('Supabase: erro ao carregar'); alert((a.error || f.error).message); return; }
   state.rows = (a.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:d.status || 'Coleta', foiAduana:!!d.foi_aduana}));
   state.finalizados = (f.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:'Finalizado', foiAduana:!!d.foi_aduana}));
@@ -916,11 +914,14 @@ async function carregarDaSupabase(){
 btnSyncSupabase.onclick = syncToSupabase;
 btnCarregarSupabase.onclick = carregarDaSupabase;
 
-loadLocal();
-initSupabase();
-renderConfigEditors();
-reclassify();
-renderAll();
+async function initApp(){
+  await loadLocal();
+  initSupabase();
+  renderConfigEditors();
+  reclassify();
+  renderAll(true);
+}
+initApp();
 </script>
 </body>
 </html>

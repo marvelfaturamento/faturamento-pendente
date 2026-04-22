@@ -521,6 +521,26 @@ let realtimeLoaded = false;
 let realtimeTimer = null;
 let realtimeChannels = [];
 
+let syncTimer = null;
+let syncInFlight = false;
+
+function queueSupabaseSync(delay=900){
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    if(!state.supabase || syncInFlight) return;
+    try{
+      syncInFlight = true;
+      await syncToSupabase(true);
+      setStatusText('Supabase: sincronização automática ativa');
+    }catch(e){
+      console.error(e);
+      setStatusText('Supabase: falha na sincronização automática');
+    } finally {
+      syncInFlight = false;
+    }
+  }, delay);
+}
+
 function scheduleRealtimeReload(){
   clearTimeout(realtimeTimer);
   realtimeTimer = setTimeout(async () => {
@@ -766,9 +786,9 @@ function renderConfigEditors(){
   fretesBox.innerHTML = state.config.fretes.map((f,i) => `<div class="cfgItem5"><div>${f.pagador || '-'}</div><div>${f.remetente || '-'}</div><div>${f.ufOrigem || '-'}</div><div>${f.ufDestino || '-'}</div><div>${money(f.frete || 0)}</div><button class="xbtn btn-red" onclick="removeFrete(${i})">x</button></div>`).join('') || '<div class="small">Nenhuma regra de frete cadastrada.</div>';
   checkpointBox.innerHTML = (state.config.checkpoints || []).map((c,i) => `<div class="checkpointTag"><div>${c.cliente || '-'}</div><div>${c.cidade || '-'}</div><div>${c.ufOrigem || c.ufDestino || '-'}</div><button class="xbtn btn-red" onclick="removeCheckpoint(${i})">x</button></div>`).join('') || '<div class="small">Nenhum checkpoint cadastrado.</div>';
 }
-window.removeSimpleCfg = function(name, idx){ state.config[name].splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); };
-window.removeFrete = function(idx){ state.config.fretes.splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); };
-window.removeCheckpoint = function(idx){ state.config.checkpoints.splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); };
+window.removeSimpleCfg = function(name, idx){ state.config[name].splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); queueSupabaseSync(); };
+window.removeFrete = function(idx){ state.config.fretes.splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); queueSupabaseSync(); };
+window.removeCheckpoint = function(idx){ state.config.checkpoints.splice(idx,1); renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); queueSupabaseSync(); };
 
 addCheckpoint.onclick = () => {
   const cliente = cpCliente.value.trim();
@@ -788,6 +808,7 @@ addCheckpoint.onclick = () => {
   saveLocalDebounced();
   reclassify();
   renderAll(false);
+  queueSupabaseSync();
 };
 
 addAduana.onclick = () => { const v = novoAduana.value.trim(); if(!v) return; state.config.aduanas.push(v); novoAduana.value=''; renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false); };
@@ -807,7 +828,7 @@ btnSalvarCfg.onclick = () => {
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
   state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
   state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
-  saveLocalDebounced(); reclassify(); renderAll(false); alert('Configurações salvas.');
+  saveLocalDebounced(); reclassify(); renderAll(false); queueSupabaseSync(); alert('Configurações salvas.');
 };
 
 function renderAll(full=false){
@@ -898,7 +919,7 @@ function parseExcelRows(matrix){
       passouCheckpoint: old?.passouCheckpoint || false
     });
   }
-  state.rows = [...freshMap.values()]; reclassify(); saveLocal(); renderAll(true);
+  state.rows = [...freshMap.values()]; reclassify(); saveLocal(); renderAll(true); queueSupabaseSync(1200);
 }
 fileExcel.addEventListener('change', e => {
   const file = e.target.files[0]; if(!file) return;
@@ -921,13 +942,13 @@ window.alterarStatus = function(id, value, fromFinalizados=false){
     const row = state.finalizados[idx];
     row.status = value;
     if(value !== 'Finalizado'){ state.finalizados.splice(idx, 1); state.rows.unshift(row); reclassify(); }
-    saveLocalDebounced(); renderAll(false); return;
+    saveLocalDebounced(); renderAll(false); queueSupabaseSync(); return;
   }
   const row = state.rows.find(x => x.id === id);
   if(!row) return;
   row.status = value;
-  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); return; }
-  reclassify(); saveLocalDebounced(); renderAll(false);
+  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); queueSupabaseSync(); return; }
+  reclassify(); saveLocalDebounced(); renderAll(false); queueSupabaseSync();
 };
 window.marcarFaturar = id => alterarStatus(id, 'Faturar', false);
 window.marcarFinalizado = id => alterarStatus(id, 'Finalizado', false);
@@ -939,9 +960,9 @@ window.reabrirRegistro = function(id){
   row.status = 'Coleta';
   state.finalizados.splice(idx, 1);
   state.rows.unshift(row);
-  reclassify(); saveLocalDebounced(); renderAll(false);
+  reclassify(); saveLocalDebounced(); renderAll(false); queueSupabaseSync();
 };
-btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
+btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); queueSupabaseSync(); } };
 
 btnExport.onclick = () => {
   const blob = new Blob([JSON.stringify({rows: state.rows, finalizados: state.finalizados, config: state.config}, null, 2)], {type:'application/json'});
@@ -990,23 +1011,63 @@ async function syncConfigsToSupabase(){
   if(state.config.fretes.length) await state.supabase.from('config_frete_padrao').insert(state.config.fretes.map(v => ({pagador:v.pagador || null, remetente:v.remetente || null, uf_origem:v.ufOrigem || null, uf_destino:v.ufDestino || null, frete:Number(v.frete || 0), ativo:true})));
   if((state.config.checkpoints || []).length) await state.supabase.from('config_checkpoint').insert((state.config.checkpoints || []).map(v => ({cliente:v.cliente || null, cidade:v.cidade || null, uf_origem:v.ufOrigem || 'EX', destino_bucket:v.destinoBucket || 'alertaInt'})));
 }
-async function syncToSupabase(){
-  if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
+async function syncToSupabase(silent=false){
+  if(!state.supabase){
+    if(!silent) alert('Preencha a conexão no HTML primeiro.');
+    return;
+  }
+
   setStatusText('Supabase: sincronizando...');
+
   const ativosMap = new Map();
   state.rows.forEach(r => ativosMap.set(r.id, mapRowToDb(r)));
   const ativosPayload = [...ativosMap.values()];
+
   const finaisMap = new Map();
   state.finalizados.forEach(r => finaisMap.set(r.id, {...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
   const finaisPayload = [...finaisMap.values()];
+
+  const activeIds = ativosPayload.map(x => x.id).filter(Boolean);
+  const finalIds = finaisPayload.map(x => x.id).filter(Boolean);
+
   let error = null;
-  if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, { onConflict: 'id' }); error = res.error || error; }
-  if(finaisPayload.length){ const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, { onConflict: 'id' }); error = res.error || error; }
-  if(!error){ await syncConfigsToSupabase(); }
-  if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
-  await carregarDaSupabase();
-  setStatusText('Supabase: sincronização concluída e painel recarregado');
-  alert('Sincronização concluída.');
+
+  if(ativosPayload.length){
+    const res = await state.supabase.from('painel_902').upsert(ativosPayload, { onConflict: 'id' });
+    error = res.error || error;
+  }
+
+  if(finaisPayload.length){
+    const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, { onConflict: 'id' });
+    error = res.error || error;
+  }
+
+  /* Mantém as tabelas coerentes:
+     - tudo que está finalizado sai da tabela ativa
+     - tudo que voltou a ficar ativo sai da tabela de finalizados */
+  if(finalIds.length){
+    const res = await state.supabase.from('painel_902').delete().in('id', finalIds);
+    error = res.error || error;
+  }
+
+  if(activeIds.length){
+    const res = await state.supabase.from('painel_902_finalizados').delete().in('id', activeIds);
+    error = res.error || error;
+  }
+
+  if(!error){
+    await syncConfigsToSupabase();
+  }
+
+  if(error){
+    setStatusText('Supabase: erro na sincronização');
+    if(!silent) alert(error.message);
+    throw error;
+  }
+
+  await carregarDaSupabase(true);
+  setStatusText(silent ? 'Supabase: sincronização automática concluída' : 'Supabase: sincronização concluída e painel recarregado');
+  if(!silent) alert('Sincronização concluída.');
 }
 async function carregarDaSupabase(silent=false){
   if(!state.supabase){

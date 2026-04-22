@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel 902 Supabase Ajustado v4</title>
+  <title>Painel 902 Estável</title>
   <link rel="icon" href="data:,">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -195,7 +195,7 @@
   <aside class="side">
     <div class="brand">
       <h1>Painel 902</h1>
-      <p>Versão ajustada para Supabase com controle mensal e configurações mais discretas.</p>
+      <p>Versão estável com uma única tabela na Supabase, auto-sync e tempo real.</p>
     </div>
     <button class="navbtn active" data-tab="ativo">Painel Ativo</button>
     <button class="navbtn" data-tab="agNota">Ag nota</button>
@@ -523,8 +523,11 @@ let realtimeChannels = [];
 
 let syncTimer = null;
 let syncInFlight = false;
+let localDirty = false;
+let suppressRealtimeUntil = 0;
 
 function queueSupabaseSync(delay=900){
+  localDirty = true;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(async () => {
     if(!state.supabase || syncInFlight) return;
@@ -542,15 +545,17 @@ function queueSupabaseSync(delay=900){
 }
 
 function scheduleRealtimeReload(){
+  if(localDirty || syncInFlight || Date.now() < suppressRealtimeUntil) return;
   clearTimeout(realtimeTimer);
   realtimeTimer = setTimeout(async () => {
+    if(localDirty || syncInFlight || Date.now() < suppressRealtimeUntil) return;
     try{
       await carregarDaSupabase(true);
       setStatusText('Supabase: atualização em tempo real ativa');
     }catch(e){
       console.error(e);
     }
-  }, 400);
+  }, 600);
 }
 
 function setupRealtimeSubscriptions(){
@@ -558,7 +563,6 @@ function setupRealtimeSubscriptions(){
 
   const tables = [
     'painel_902',
-    'painel_902_finalizados',
     'config_aduanas',
     'config_clientes_alerta',
     'config_clientes_paga',
@@ -688,25 +692,27 @@ function reclassify(){
     }
 
     /* Faturar manual:
-       - DESTINATÁRIO EX => alertaExpo
-       - senão, REMETENTE EX => alertaInt impo
-       - sem EX => alertaNac
+       - checkpoint só libera depois de sair da cidade
+       - cliente expo + destino EX => alertaExpo
+       - fluxo aduana/importação + origem EX => alertaInt
+       - cliente da lista alerta nacional sem EX => alertaNac
+       - demais casos ficam no ativo
     */
     if(row.status === 'Faturar'){
       if(checkpointRule){
-        if(row.passouCheckpoint && !rowInCheckpointCity(row, checkpointRule)) row.bucket = checkpointRule.destinoBucket || 'alertaExpo';
+        if(row.passouCheckpoint && !rowInCheckpointCity(row, checkpointRule)) row.bucket = checkpointRule.destinoBucket || 'alertaInt';
         else row.bucket = 'ativo';
       }
-      else if(isUFEx(row.ufDest)) row.bucket = 'alertaExpo';
-      else if(isUFEx(row.ufRem)) row.bucket = 'alertaInt';
-      else row.bucket = 'alertaNac';
+      else if(hasExpo(row) && isUFEx(row.ufDest)) row.bucket = 'alertaExpo';
+      else if((hasPaga(row) || checkpointRule) && isUFEx(row.ufRem)) row.bucket = 'alertaInt';
+      else if(row.alerta && !isUFEx(row.ufRem) && !isUFEx(row.ufDest)) row.bucket = 'alertaNac';
+      else row.bucket = 'ativo';
       return;
     }
 
     /* Clientes de alerta automático:
-       - sem EX => alerta nacional
-       - com EX não sobem sozinhos; só entram quando marcar Faturar,
-         exceto os clientes da lista expo, que podem subir automaticamente para expo.
+       - só clientes da lista alerta nacional entram aqui
+       - e apenas quando não houver EX
     */
     if(row.alerta){
       if(!isUFEx(row.ufRem) && !isUFEx(row.ufDest)){
@@ -765,8 +771,7 @@ window.zerarCompetenciaSupabase = async function(m){
   const [year, month] = m.split('-');
   const monthKey = `${year}-${month}-01`;
   const del1 = await state.supabase.from('painel_902').delete().eq('competencia_mes', monthKey);
-  const del2 = await state.supabase.from('painel_902_finalizados').delete().eq('competencia_mes', monthKey);
-  const error = del1.error || del2.error;
+  const error = del1.error;
   if(error){ alert('Erro ao zerar mês: ' + error.message); return; }
   await carregarDaSupabase();
   alert(`Competência ${m} zerada na Supabase.`);
@@ -888,8 +893,7 @@ function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ con
 function parseExcelRows(matrix){
   const header = detectHeaderRow(matrix);
   const rows = matrix.slice(header + 1);
-  const oldMap = new Map(state.rows.map(r => [r.id, r]));
-  const finalSet = new Set(state.finalizados.map(r => r.id));
+  const oldAllMap = new Map([...state.rows, ...state.finalizados].map(r => [r.id, r]));
   const freshMap = new Map();
   for(const r of rows){
     if(!r || r.length < 10) continue;
@@ -899,8 +903,7 @@ function parseExcelRows(matrix){
     const pv = String(r[3] || '').trim();
     if(!ref || !pv) continue;
     const id = [ref, filial, pv].join('|');
-    if(finalSet.has(id)) continue;
-    const old = oldMap.get(id);
+    const old = oldAllMap.get(id);
     freshMap.set(id, {
       id, ref, dataPC, filial, pv,
       cavalo: String(r[6] ?? r[5] ?? '').trim(),
@@ -1019,39 +1022,16 @@ async function syncToSupabase(silent=false){
 
   setStatusText('Supabase: sincronizando...');
 
-  const ativosMap = new Map();
-  state.rows.forEach(r => ativosMap.set(r.id, mapRowToDb(r)));
-  const ativosPayload = [...ativosMap.values()];
+  const mergedMap = new Map();
+  state.rows.forEach(r => mergedMap.set(r.id, {...r, status: r.status || 'Coleta'}));
+  state.finalizados.forEach(r => mergedMap.set(r.id, {...r, status: 'Finalizado', finalizadoEm: r.finalizadoEm || new Date().toISOString()}));
 
-  const finaisMap = new Map();
-  state.finalizados.forEach(r => finaisMap.set(r.id, {...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
-  const finaisPayload = [...finaisMap.values()];
-
-  const activeIds = ativosPayload.map(x => x.id).filter(Boolean);
-  const finalIds = finaisPayload.map(x => x.id).filter(Boolean);
+  const payload = [...mergedMap.values()].map(mapRowToDb);
 
   let error = null;
 
-  if(ativosPayload.length){
-    const res = await state.supabase.from('painel_902').upsert(ativosPayload, { onConflict: 'id' });
-    error = res.error || error;
-  }
-
-  if(finaisPayload.length){
-    const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, { onConflict: 'id' });
-    error = res.error || error;
-  }
-
-  /* Mantém as tabelas coerentes:
-     - tudo que está finalizado sai da tabela ativa
-     - tudo que voltou a ficar ativo sai da tabela de finalizados */
-  if(finalIds.length){
-    const res = await state.supabase.from('painel_902').delete().in('id', finalIds);
-    error = res.error || error;
-  }
-
-  if(activeIds.length){
-    const res = await state.supabase.from('painel_902_finalizados').delete().in('id', activeIds);
+  if(payload.length){
+    const res = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
     error = res.error || error;
   }
 
@@ -1066,6 +1046,8 @@ async function syncToSupabase(silent=false){
   }
 
   await carregarDaSupabase(true);
+  localDirty = false;
+  suppressRealtimeUntil = Date.now() + 2500;
   setStatusText(silent ? 'Supabase: sincronização automática concluída' : 'Supabase: sincronização concluída e painel recarregado');
   if(!silent) alert('Sincronização concluída.');
 }
@@ -1082,18 +1064,13 @@ async function carregarDaSupabase(silent=false){
     .select('*')
     .order('updated_at', { ascending:false });
 
-  const f = await state.supabase
-    .from('painel_902_finalizados')
-    .select('*')
-    .order('updated_at', { ascending:false });
-
-  if(a.error || f.error){
+  if(a.error){
     setStatusText('Supabase: erro ao carregar');
-    if(!silent) alert((a.error || f.error).message);
+    if(!silent) alert(a.error.message);
     return;
   }
 
-  state.rows = (a.data || []).map(d => ({
+  const allRows = (a.data || []).map(d => ({
     id: d.id,
     pv: d.pv || '',
     ref: d.ref || '',
@@ -1111,29 +1088,12 @@ async function carregarDaSupabase(silent=false){
     referencia: d.referencia || '',
     status: d.status || 'Coleta',
     foiAduana: !!d.foi_aduana,
-    passouCheckpoint: !!d.passou_checkpoint
+    passouCheckpoint: !!d.passou_checkpoint,
+    finalizadoEm: d.finalizado_em || null
   }));
 
-  state.finalizados = (f.data || []).map(d => ({
-    id: d.id,
-    pv: d.pv || '',
-    ref: d.ref || '',
-    filial: d.filial || '',
-    dataPC: d.data_pc || '',
-    cavalo: d.cavalo || '',
-    posicao: d.posicao_atual || '',
-    motorista: d.motorista || '',
-    pagador: d.pagador || '',
-    remetente: d.remetente || '',
-    ufRem: d.uf_origem || '',
-    destinatario: d.destinatario || '',
-    ufDest: d.uf_destino || '',
-    talhao: d.talhao || '',
-    referencia: d.referencia || '',
-    status: 'Finalizado',
-    foiAduana: !!d.foi_aduana,
-    passouCheckpoint: !!d.passou_checkpoint
-  }));
+  state.finalizados = allRows.filter(r => r.status === 'Finalizado');
+  state.rows = allRows.filter(r => r.status !== 'Finalizado');
 
   const cfgA = await state.supabase.from('config_aduanas').select('descricao').eq('ativo', true);
   const cfgB = await state.supabase.from('config_clientes_alerta').select('cliente').eq('ativo', true);
@@ -1164,6 +1124,7 @@ async function carregarDaSupabase(silent=false){
   reclassify();
   await saveLocal();
   renderAll(true);
+  localDirty = false;
   setStatusText(`Supabase: ${state.rows.length} ativos e ${state.finalizados.length} finalizados carregados`);
 }
 btnSyncSupabase.onclick = syncToSupabase;
@@ -1179,7 +1140,7 @@ async function initApp(){
   if(state.supabase){
     await carregarDaSupabase(true);
     setupRealtimeSubscriptions();
-    setStatusText('Supabase: carregado e tempo real ativo');
+    setStatusText('Supabase: carregado, auto-sync e tempo real ativos');
   }
 }
 initApp();

@@ -38,7 +38,9 @@
     .cfgInputLine5 .field:nth-child(5){flex:0 0 110px;min-width:110px;max-width:110px}
 
     .cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
-    .cardBtn{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#15275c,#0f1d43);cursor:pointer;text-align:left}
+    .cardBtn{padding:12px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#15275c,#0f1d43);cursor:pointer;text-align:left;transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease}
+    .cardBtn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(0,0,0,.22);border-color:#3b5fb8}
+    .cardBtn:active{transform:translateY(0)}
     .cardBtn .k{font-size:11px;color:var(--muted)}
     .cardBtn .v{font-size:24px;font-weight:900;line-height:1;margin:5px 0}
     .panel{padding:10px;min-width:0}
@@ -598,6 +600,12 @@ function openTab(tab){
 }
 document.querySelectorAll('.navbtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.tab));
 document.querySelectorAll('.cardBtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.open));
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.cardBtn');
+  if(!btn) return;
+  const tab = btn.dataset.open;
+  if(tab) openTab(tab);
+});
 
 function isAduanaPosition(pos){ const t = norm(pos); return state.config.aduanas.some(x => t.includes(norm(x))); }
 function isInBrazil(pos){ return norm(pos).includes('BRASIL'); }
@@ -694,7 +702,7 @@ function reclassify(){
     /* Faturar manual:
        - checkpoint só libera depois de sair da cidade
        - cliente expo + destino EX => alertaExpo
-       - fluxo aduana/importação + origem EX => alertaInt
+       - qualquer caso com origem EX => alertaInt
        - cliente da lista alerta nacional sem EX => alertaNac
        - demais casos ficam no ativo
     */
@@ -704,7 +712,7 @@ function reclassify(){
         else row.bucket = 'ativo';
       }
       else if(hasExpo(row) && isUFEx(row.ufDest)) row.bucket = 'alertaExpo';
-      else if((hasPaga(row) || checkpointRule) && isUFEx(row.ufRem)) row.bucket = 'alertaInt';
+      else if(isUFEx(row.ufRem)) row.bucket = 'alertaInt';
       else if(row.alerta && !isUFEx(row.ufRem) && !isUFEx(row.ufDest)) row.bucket = 'alertaNac';
       else row.bucket = 'ativo';
       return;

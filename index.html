@@ -906,7 +906,7 @@ fileBase.addEventListener('change', e => {
 });
 
 function mapRowToDb(row){
-  return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, passou_checkpoint: !!row.passouCheckpoint, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia || null};
+  return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, passou_checkpoint: !!row.passouCheckpoint, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
 }
 async function syncConfigsToSupabase(){
   await state.supabase.from('config_aduanas').delete().neq('id',0);
@@ -933,8 +933,8 @@ async function syncToSupabase(){
   state.finalizados.forEach(r => finaisMap.set(r.id, {...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
   const finaisPayload = [...finaisMap.values()];
   let error = null;
-  if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
-  if(finaisPayload.length){ const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
+  if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, { onConflict: 'id' }); error = res.error || error; }
+  if(finaisPayload.length){ const res = await state.supabase.from('painel_902_finalizados').upsert(finaisPayload, { onConflict: 'id' }); error = res.error || error; }
   if(!error){ await syncConfigsToSupabase(); }
   if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
   setStatusText('Supabase: sincronização concluída'); alert('Sincronização concluída.');

@@ -5,8 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel 902 Supabase Ajustado v4</title>
   <link rel="icon" href="data:,">
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js">
+async function initApp(){
+  await loadLocal();
+  initSupabase();
+  renderConfigEditors();
+  reclassify();
+  renderAll(true);
+
+  if(state.supabase){
+    await carregarDaSupabase();
+  }
+}
+initApp();
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+async function initApp(){
+  await loadLocal();
+  initSupabase();
+  renderConfigEditors();
+  reclassify();
+  renderAll(true);
+
+  if(state.supabase){
+    await carregarDaSupabase();
+  }
+}
+initApp();
+
+</script>
   <style>
     :root{
       --bg:#071022; --line:#263b77; --txt:#edf3ff; --muted:#9bb0df;
@@ -1049,6 +1077,20 @@ async function initApp(){
   renderAll(true);
 }
 initApp();
+
+async function initApp(){
+  await loadLocal();
+  initSupabase();
+  renderConfigEditors();
+  reclassify();
+  renderAll(true);
+
+  if(state.supabase){
+    await carregarDaSupabase();
+  }
+}
+initApp();
+
 </script>
 </body>
 </html>

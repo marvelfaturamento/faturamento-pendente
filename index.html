@@ -889,7 +889,7 @@ async function syncToSupabase(){
   const ativosPayload = state.rows.map(mapRowToDb);
   const finaisPayload = state.finalizados.map(r => ({...mapRowToDb(r), finalizado_em: new Date().toISOString()}));
   let error = null;
-  if(ativosPayload.length){ const res = await state.supabase.from('pcs_ativas').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
+  if(ativosPayload.length){ const res = await state.supabase.from('painel_902').upsert(ativosPayload, {onConflict:'id'}); error = res.error || error; }
   if(finaisPayload.length){ const res = await state.supabase.from('pcs_finalizadas').upsert(finaisPayload, {onConflict:'id'}); error = res.error || error; }
   if(!error){ await syncConfigsToSupabase(); await state.supabase.rpc('recalculate_month_control'); }
   if(error){ setStatusText('Supabase: erro na sincronização'); alert(error.message); return; }
@@ -898,7 +898,7 @@ async function syncToSupabase(){
 async function carregarDaSupabase(){
   if(!state.supabase){ alert('Preencha a conexão no HTML primeiro.'); return; }
   setStatusText('Supabase: carregando...');
-  const a = await state.supabase.from('pcs_ativas').select('*').order('updated_at', {ascending:false});
+  const a = await state.supabase.from('painel_902').select('*').order('updated_at', {ascending:false});
   const f = await state.supabase.from('pcs_finalizadas').select('*').order('updated_at', {ascending:false});
   if(a.error || f.error){ setStatusText('Supabase: erro ao carregar'); alert((a.error || f.error).message); return; }
   state.rows = (a.data || []).map(d => ({id:d.id, pv:d.pv, ref:d.ref, filial:d.filial, dataPC:d.data_pc || '', cavalo:d.cavalo || '', posicao:d.posicao_atual || '', motorista:d.motorista || '', pagador:d.pagador || '', remetente:d.remetente || '', ufRem:d.uf_origem || '', destinatario:d.destinatario || '', ufDest:d.uf_destino || '', talhao:d.talhao || '', referencia:d.referencia || '', status:d.status || 'Coleta', foiAduana:!!d.foi_aduana}));

@@ -5,36 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel 902 Supabase Ajustado v4</title>
   <link rel="icon" href="data:,">
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js">
-async function initApp(){
-  await loadLocal();
-  initSupabase();
-  renderConfigEditors();
-  reclassify();
-  renderAll(true);
-
-  if(state.supabase){
-    await carregarDaSupabase();
-  }
-}
-initApp();
-
-</script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-async function initApp(){
-  await loadLocal();
-  initSupabase();
-  renderConfigEditors();
-  reclassify();
-  renderAll(true);
-
-  if(state.supabase){
-    await carregarDaSupabase();
-  }
-}
-initApp();
-
-</script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
       --bg:#071022; --line:#263b77; --txt:#edf3ff; --muted:#9bb0df;
@@ -198,6 +170,25 @@ initApp();
     }
     @media (max-width:1080px){.app{grid-template-columns:1fr}.cards,.filters,.cfgCols,.cfgInputLine5,.cfgItem5{grid-template-columns:1fr}.tableWrap{max-height:none}.monthCard{grid-template-columns:1fr}.monthActions{align-items:flex-start}}
   </style>
+<style>
+#addFrete{
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  min-width:34px;
+  height:30px;
+  padding:0;
+  margin:0;
+  flex-shrink:0;
+  z-index:3;
+  visibility:visible !important;
+  opacity:1 !important;
+}
+.cfgInputLine5{
+  overflow:visible;
+}
+</style>
 </head>
 <body>
 <div class="app">
@@ -524,6 +515,54 @@ function setStatusText(msg){ supabaseStatus.textContent = msg; }
 function initSupabase(){
   if(!SUPABASE_URL || !SUPABASE_ANON_KEY){ setStatusText('Supabase: preencha URL e anon key no HTML'); return; }
   try{ state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); setStatusText('Supabase: configurada no HTML'); }catch(e){ setStatusText('Supabase: erro ao criar cliente'); }
+}
+
+let realtimeLoaded = false;
+let realtimeTimer = null;
+let realtimeChannels = [];
+
+function scheduleRealtimeReload(){
+  clearTimeout(realtimeTimer);
+  realtimeTimer = setTimeout(async () => {
+    try{
+      await carregarDaSupabase(true);
+      setStatusText('Supabase: atualização em tempo real ativa');
+    }catch(e){
+      console.error(e);
+    }
+  }, 400);
+}
+
+function setupRealtimeSubscriptions(){
+  if(!state.supabase || realtimeLoaded) return;
+
+  const tables = [
+    'painel_902',
+    'painel_902_finalizados',
+    'config_aduanas',
+    'config_clientes_alerta',
+    'config_clientes_paga',
+    'config_clientes_expo',
+    'config_frete_padrao',
+    'config_checkpoint'
+  ];
+
+  tables.forEach((table) => {
+    const ch = state.supabase
+      .channel('rt-' + table)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table
+      }, () => {
+        scheduleRealtimeReload();
+      })
+      .subscribe();
+
+    realtimeChannels.push(ch);
+  });
+
+  realtimeLoaded = true;
 }
 function openTab(tab){
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
@@ -969,9 +1008,9 @@ async function syncToSupabase(){
   setStatusText('Supabase: sincronização concluída e painel recarregado');
   alert('Sincronização concluída.');
 }
-async function carregarDaSupabase(){
+async function carregarDaSupabase(silent=false){
   if(!state.supabase){
-    alert('Preencha a conexão no HTML primeiro.');
+    if(!silent) alert('Preencha a conexão no HTML primeiro.');
     return;
   }
 
@@ -989,7 +1028,7 @@ async function carregarDaSupabase(){
 
   if(a.error || f.error){
     setStatusText('Supabase: erro ao carregar');
-    alert((a.error || f.error).message);
+    if(!silent) alert((a.error || f.error).message);
     return;
   }
 
@@ -1075,43 +1114,13 @@ async function initApp(){
   renderConfigEditors();
   reclassify();
   renderAll(true);
-}
-initApp();
-
-async function initApp(){
-  await loadLocal();
-  initSupabase();
-  renderConfigEditors();
-  reclassify();
-  renderAll(true);
 
   if(state.supabase){
-    await carregarDaSupabase();
+    await carregarDaSupabase(true);
+    setupRealtimeSubscriptions();
+    setStatusText('Supabase: carregado e tempo real ativo');
   }
 }
 initApp();
-
 </script>
 </body>
-</html>
-
-
-<style>
-#addFrete{
-  display:flex !important;
-  align-items:center;
-  justify-content:center;
-  width:34px;
-  min-width:34px;
-  height:30px;
-  padding:0;
-  margin:0;
-  flex-shrink:0;
-  z-index:3;
-  visibility:visible !important;
-  opacity:1 !important;
-}
-.cfgInputLine5{
-  overflow:visible;
-}
-</style>

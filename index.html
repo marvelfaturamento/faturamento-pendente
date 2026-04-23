@@ -432,6 +432,9 @@ const state = {
 };
 
 function norm(v){ return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function dedupeList(arr){ const seen = new Set(); return (arr || []).map(v => String(v||'').trim()).filter(Boolean).filter(v => { const k = norm(v); if(seen.has(k)) return false; seen.add(k); return true; }); }
+function dedupeFretes(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(f => { const k = [norm(f.pagador), norm(f.remetente), norm(f.ufOrigem), norm(f.ufDestino), Number(f.frete||0)].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(f => ({pagador:f.pagador||'', remetente:f.remetente||'', ufOrigem:f.ufOrigem||'', ufDestino:f.ufDestino||'', frete:Number(f.frete||0)})); }
+function dedupeCheckpoints(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(c => { const k = [norm(c.cliente), norm(c.cidade), norm(c.ufOrigem || c.ufDestino || 'EX'), norm(c.destinoBucket || 'alertaInt')].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(c => ({cliente:c.cliente||'', cidade:c.cidade||'', ufOrigem:c.ufOrigem || c.ufDestino || 'EX', destinoBucket:c.destinoBucket || 'alertaInt'})); }
 function money(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 
 function openDB(){
@@ -510,6 +513,12 @@ async function loadLocal(){
   if(!Array.isArray(state.config.paga)) state.config.paga = [];
   if(!Array.isArray(state.config.fretes)) state.config.fretes = [];
   if(!Array.isArray(state.config.checkpoints)) state.config.checkpoints = [];
+  state.config.aduanas = dedupeList(state.config.aduanas);
+  state.config.alerta = dedupeList(state.config.alerta);
+  state.config.expo = dedupeList(state.config.expo);
+  state.config.paga = dedupeList(state.config.paga);
+  state.config.fretes = dedupeFretes(state.config.fretes);
+  state.config.checkpoints = dedupeCheckpoints(state.config.checkpoints);
   if(!Array.isArray(state.config.checkpoints)) state.config.checkpoints = [{cliente:'MINERVA', cidade:'VARGINHA', ufDestino:'EX', destinoBucket:'alertaInt'}];
   if(!Array.isArray(state.config.checkpoints)) state.config.checkpoints = [{cliente:'MINERVA', cidade:'VARGINHA', ufDestino:'EX', destinoBucket:'alertaExpo', obs:'regra inicial'}];
 }
@@ -780,6 +789,12 @@ window.zerarCompetenciaSupabase = async function(m){
 };
 
 function renderConfigEditors(){
+  state.config.aduanas = dedupeList(state.config.aduanas);
+  state.config.alerta = dedupeList(state.config.alerta);
+  state.config.expo = dedupeList(state.config.expo);
+  state.config.paga = dedupeList(state.config.paga);
+  state.config.fretes = dedupeFretes(state.config.fretes);
+  state.config.checkpoints = dedupeCheckpoints(state.config.checkpoints);
   if(!Array.isArray(state.config.aduanas)) state.config.aduanas = [];
   if(!Array.isArray(state.config.alerta)) state.config.alerta = [];
   if(!Array.isArray(state.config.expo)) state.config.expo = [];
@@ -1048,6 +1063,12 @@ function mapRowToDb(row){
   return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, passou_checkpoint: !!row.passouCheckpoint, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
 }
 async function syncConfigsToSupabase(){
+  state.config.aduanas = dedupeList(state.config.aduanas);
+  state.config.alerta = dedupeList(state.config.alerta);
+  state.config.expo = dedupeList(state.config.expo);
+  state.config.paga = dedupeList(state.config.paga);
+  state.config.fretes = dedupeFretes(state.config.fretes);
+  state.config.checkpoints = dedupeCheckpoints(state.config.checkpoints);
   await state.supabase.from('config_aduanas').delete().neq('id',0);
   await state.supabase.from('config_clientes_alerta').delete().neq('id',0);
   await state.supabase.from('config_clientes_paga').delete().neq('id',0);
@@ -1179,6 +1200,12 @@ async function carregarDaSupabase(silent=false){
     ufOrigem: x.uf_origem || 'EX',
     destinoBucket: x.destino_bucket || 'alertaInt'
   }));
+  state.config.aduanas = dedupeList(state.config.aduanas);
+  state.config.alerta = dedupeList(state.config.alerta);
+  state.config.expo = dedupeList(state.config.expo);
+  state.config.paga = dedupeList(state.config.paga);
+  state.config.fretes = dedupeFretes(state.config.fretes);
+  state.config.checkpoints = dedupeCheckpoints(state.config.checkpoints);
 
   renderConfigEditors();
   reclassify();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel 902 v10 Estável</title>
+  <title>Painel 902 v11 Auto Save Leve</title>
   <link rel="icon" href="data:,">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -519,6 +519,56 @@ function initSupabase(){
   try{ state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); setStatusText('Supabase: configurada no HTML'); }catch(e){ setStatusText('Supabase: erro ao criar cliente'); }
 }
 
+let pollingTimer = null;
+let isApplyingRemote = false;
+let lastRemoteStamp = '';
+
+async function persistRowToSupabase(row){
+  if(!state.supabase || !row?.id) return;
+  const payload = mapRowToDb(row);
+  const { error } = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
+  if(error) throw error;
+}
+
+async function refreshRemoteStamp(){
+  if(!state.supabase) return;
+  const { data, error } = await state.supabase
+    .from('painel_902')
+    .select('updated_at')
+    .order('updated_at', { ascending:false })
+    .limit(1);
+  if(!error && data && data.length){
+    lastRemoteStamp = data[0].updated_at || lastRemoteStamp;
+  }
+}
+
+function startPolling(){
+  if(!state.supabase || pollingTimer) return;
+  pollingTimer = setInterval(async () => {
+    if(isApplyingRemote) return;
+    try{
+      const { data, error } = await state.supabase
+        .from('painel_902')
+        .select('updated_at')
+        .order('updated_at', { ascending:false })
+        .limit(1);
+
+      if(error || !data || !data.length) return;
+      const remoteStamp = data[0].updated_at || '';
+      if(remoteStamp && lastRemoteStamp && remoteStamp !== lastRemoteStamp){
+        isApplyingRemote = true;
+        await carregarDaSupabase(true);
+        setStatusText('Supabase: atualização automática recebida');
+      }
+      lastRemoteStamp = remoteStamp || lastRemoteStamp;
+    } catch(e){
+      console.error(e);
+    } finally {
+      isApplyingRemote = false;
+    }
+  }, 12000);
+}
+
 let realtimeLoaded = false;
 let realtimeTimer = null;
 let realtimeChannels = [];
@@ -811,13 +861,23 @@ addFrete.onclick = () => {
   fPagador.value=''; fRemetente.value=''; fUfOrigem.value='EX'; fUfDestino.value=''; fFrete.value='';
   renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false);
 };
-btnSalvarCfg.onclick = () => {
+btnSalvarCfg.onclick = async () => {
   state.config.aduanas = (state.config.aduanas || []).map(v => String(v).trim()).filter(Boolean);
   state.config.alerta = (state.config.alerta || []).map(v => String(v).trim()).filter(Boolean);
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
   state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
-  state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
-  saveLocalDebounced(); reclassify(); renderAll(false); alert('Configurações salvas.');
+  state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || c.ufDestino || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
+  saveLocalDebounced();
+  reclassify();
+  renderAll(false);
+  try{
+    await syncConfigsToSupabase();
+    await refreshRemoteStamp();
+    alert('Configurações salvas.');
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao salvar configurações na Supabase.');
+  }
 };
 
 function renderAll(full=false){
@@ -929,33 +989,84 @@ fileExcel.addEventListener('change', e => {
   reader.readAsArrayBuffer(file); e.target.value = '';
 });
 
-window.alterarStatus = function(id, value, fromFinalizados=false){
+window.alterarStatus = async function(id, value, fromFinalizados=false){
   id = decodeURIComponent(id);
-  if(fromFinalizados){
-    const idx = state.finalizados.findIndex(x => x.id === id);
-    if(idx < 0) return;
-    const row = state.finalizados[idx];
+
+  try{
+    let row = null;
+
+    if(fromFinalizados){
+      const idx = state.finalizados.findIndex(x => x.id === id);
+      if(idx < 0) return;
+      row = state.finalizados[idx];
+      row.status = value;
+
+      if(value !== 'Finalizado'){
+        state.finalizados.splice(idx, 1);
+        state.rows.unshift(row);
+        reclassify();
+      }
+
+      renderAll(false);
+      await persistRowToSupabase(row);
+      await saveLocal();
+      await refreshRemoteStamp();
+      setStatusText('Supabase: item salvo automaticamente');
+      return;
+    }
+
+    row = state.rows.find(x => x.id === id);
+    if(!row) return;
+
     row.status = value;
-    if(value !== 'Finalizado'){ state.finalizados.splice(idx, 1); state.rows.unshift(row); reclassify(); }
-    saveLocalDebounced(); renderAll(false); return;
+
+    if(value === 'Finalizado'){
+      const idx = state.rows.findIndex(x => x.id === id);
+      row.finalizadoEm = new Date().toISOString();
+      state.finalizados.unshift(row);
+      state.rows.splice(idx, 1);
+      renderAll(false);
+      await persistRowToSupabase(row);
+      await saveLocal();
+      await refreshRemoteStamp();
+      setStatusText('Supabase: item salvo automaticamente');
+      return;
+    }
+
+    reclassify();
+    renderAll(false);
+    await persistRowToSupabase(row);
+    await saveLocal();
+    await refreshRemoteStamp();
+    setStatusText('Supabase: item salvo automaticamente');
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao salvar alteração na Supabase.');
   }
-  const row = state.rows.find(x => x.id === id);
-  if(!row) return;
-  row.status = value;
-  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); return; }
-  reclassify(); saveLocalDebounced(); renderAll(false);
 };
 window.marcarFaturar = id => alterarStatus(id, 'Faturar', false);
 window.marcarFinalizado = id => alterarStatus(id, 'Finalizado', false);
-window.reabrirRegistro = function(id){
+window.reabrirRegistro = async function(id){
   id = decodeURIComponent(id);
   const idx = state.finalizados.findIndex(x => x.id === id);
   if(idx < 0) return;
-  const row = state.finalizados[idx];
-  row.status = 'Coleta';
-  state.finalizados.splice(idx, 1);
-  state.rows.unshift(row);
-  reclassify(); saveLocalDebounced(); renderAll(false);
+
+  try{
+    const row = state.finalizados[idx];
+    row.status = 'Coleta';
+    row.finalizadoEm = null;
+    state.finalizados.splice(idx, 1);
+    state.rows.unshift(row);
+    reclassify();
+    renderAll(false);
+    await persistRowToSupabase(row);
+    await saveLocal();
+    await refreshRemoteStamp();
+    setStatusText('Supabase: item salvo automaticamente');
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao reabrir PC na Supabase.');
+  }
 };
 btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
 
@@ -1021,44 +1132,34 @@ async function syncToSupabase(silent=false){
   const payload = [...mergedMap.values()].map(mapRowToDb);
   const localIds = payload.map(x => x.id).filter(Boolean);
 
-  let error = null;
-
-  if(payload.length){
-    const res = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
-    error = res.error || error;
-  }
-
-  if(!error){
-    const dbIdsRes = await state.supabase.from('painel_902').select('id');
-    error = dbIdsRes.error || error;
-
-    if(!error){
-      const dbIds = (dbIdsRes.data || []).map(x => x.id).filter(Boolean);
-      const localSet = new Set(localIds);
-      const idsToDelete = dbIds.filter(id => !localSet.has(id));
-
-      for(let i = 0; i < idsToDelete.length; i += 200){
-        const chunk = idsToDelete.slice(i, i + 200);
-        const delRes = await state.supabase.from('painel_902').delete().in('id', chunk);
-        error = delRes.error || error;
-        if(error) break;
-      }
+  try{
+    if(payload.length){
+      const res = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
+      if(res.error) throw res.error;
     }
-  }
 
-  if(!error){
-    await syncConfigsToSupabase();
-  }
+    const dbIdsRes = await state.supabase.from('painel_902').select('id');
+    if(dbIdsRes.error) throw dbIdsRes.error;
 
-  if(error){
+    const dbIds = (dbIdsRes.data || []).map(x => x.id).filter(Boolean);
+    const localSet = new Set(localIds);
+    const idsToDelete = dbIds.filter(id => !localSet.has(id));
+
+    for(let i = 0; i < idsToDelete.length; i += 200){
+      const chunk = idsToDelete.slice(i, i + 200);
+      const delRes = await state.supabase.from('painel_902').delete().in('id', chunk);
+      if(delRes.error) throw delRes.error;
+    }
+
+    await saveLocal();
+    setStatusText(`Supabase: espelho atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
+    if(!silent) alert('Sincronização concluída.');
+  }catch(err){
+    console.error(err);
     setStatusText('Supabase: erro na sincronização');
-    if(!silent) alert(error.message);
-    throw error;
+    if(!silent) alert(err.message || JSON.stringify(err));
+    throw err;
   }
-
-  await saveLocal();
-  setStatusText(`Supabase: espelho atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
-  if(!silent) alert('Sincronização concluída.');
 }
 async function carregarDaSupabase(silent=false){
   if(!state.supabase){
@@ -1133,6 +1234,7 @@ async function carregarDaSupabase(silent=false){
   reclassify();
   await saveLocal();
   renderAll(true);
+  await refreshRemoteStamp();
   setStatusText(`Supabase: espelho carregado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
 }
 btnSyncSupabase.onclick = syncToSupabase;
@@ -1144,7 +1246,15 @@ async function initApp(){
   renderConfigEditors();
   reclassify();
   renderAll(true);
-  setStatusText('Supabase: modo espelho manual ativo');
+
+  if(state.supabase){
+    await carregarDaSupabase(true);
+    await refreshRemoteStamp();
+    startPolling();
+    setStatusText('Supabase: auto save por item e atualização leve ativos');
+  } else {
+    setStatusText('Supabase: modo local');
+  }
 }
 initApp();
 </script>

@@ -1019,33 +1019,75 @@ fileExcel.addEventListener('change', e => {
   reader.readAsArrayBuffer(file); e.target.value = '';
 });
 
-window.alterarStatus = function(id, value, fromFinalizados=false){
+window.alterarStatus = async function(id, value, fromFinalizados=false){
   id = decodeURIComponent(id);
-  if(fromFinalizados){
-    const idx = state.finalizados.findIndex(x => x.id === id);
-    if(idx < 0) return;
-    const row = state.finalizados[idx];
+
+  try{
+    if(fromFinalizados){
+      const idx = state.finalizados.findIndex(x => x.id === id);
+      if(idx < 0) return;
+      const row = state.finalizados[idx];
+      row.status = value;
+
+      if(value !== 'Finalizado'){
+        row.finalizadoEm = null;
+        state.finalizados.splice(idx, 1);
+        state.rows.unshift(row);
+        reclassify();
+      }
+
+      renderAll(false);
+      await autoSaveSingleRow(row, 'atualização de status');
+      return;
+    }
+
+    const row = state.rows.find(x => x.id === id);
+    if(!row) return;
+
     row.status = value;
-    if(value !== 'Finalizado'){ state.finalizados.splice(idx, 1); state.rows.unshift(row); reclassify(); }
-    saveLocalDebounced(); renderAll(false); return;
+
+    if(value === 'Finalizado'){
+      const idx = state.rows.findIndex(x => x.id === id);
+      row.finalizadoEm = new Date().toISOString();
+      state.finalizados.unshift(row);
+      state.rows.splice(idx, 1);
+      renderAll(false);
+      await autoSaveSingleRow(row, 'finalização da PC');
+      return;
+    }
+
+    reclassify();
+    renderAll(false);
+    await autoSaveSingleRow(row, 'atualização de status');
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao salvar alteração na Supabase.');
+    await saveLocal();
+    renderAll(true);
   }
-  const row = state.rows.find(x => x.id === id);
-  if(!row) return;
-  row.status = value;
-  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); return; }
-  reclassify(); saveLocalDebounced(); renderAll(false);
 };
 window.marcarFaturar = id => alterarStatus(id, 'Faturar', false);
 window.marcarFinalizado = id => alterarStatus(id, 'Finalizado', false);
-window.reabrirRegistro = function(id){
+window.reabrirRegistro = async function(id){
   id = decodeURIComponent(id);
   const idx = state.finalizados.findIndex(x => x.id === id);
   if(idx < 0) return;
-  const row = state.finalizados[idx];
-  row.status = 'Coleta';
-  state.finalizados.splice(idx, 1);
-  state.rows.unshift(row);
-  reclassify(); saveLocalDebounced(); renderAll(false);
+
+  try{
+    const row = state.finalizados[idx];
+    row.status = 'Coleta';
+    row.finalizadoEm = null;
+    state.finalizados.splice(idx, 1);
+    state.rows.unshift(row);
+    reclassify();
+    renderAll(false);
+    await autoSaveSingleRow(row, 'reabertura da PC');
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao reabrir PC na Supabase.');
+    await saveLocal();
+    renderAll(true);
+  }
 };
 btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
 
@@ -1081,6 +1123,24 @@ fileBase.addEventListener('change', e => {
 
 function mapRowToDb(row){
   return {id: row.id, pv: row.pv, ref: row.ref, filial: row.filial, data_pc: row.dataPC || null, cavalo: row.cavalo || null, posicao_atual: row.posicao || null, motorista: row.motorista || null, pagador: row.pagador || null, remetente: row.remetente || null, uf_origem: row.ufRem || null, destinatario: row.destinatario || null, uf_destino: row.ufDest || null, talhao: row.talhao || null, referencia: row.referencia || null, status: row.status || 'Coleta', bucket_atual: row.bucket || 'ativo', foi_aduana: !!row.foiAduana, passou_checkpoint: !!row.passouCheckpoint, frete_padrao: Number(row.frete || 0), competencia_mes: row.competencia ? `${row.competencia}-01` : null};
+}
+
+async function autoSaveSingleRow(row, actionLabel='salvar a PC'){
+  if(!state.supabase || !row?.id) return;
+  if(busyOperation){
+    throw new Error('Já existe uma operação em andamento.');
+  }
+
+  setBusyOperation('Salvando PC... aguarde');
+  try{
+    const payload = mapRowToDb(row);
+    const { error } = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
+    if(error) throw error;
+    await saveLocal();
+    setStatusText(`Supabase: ${actionLabel} concluído`);
+  } finally {
+    setBusyOperation('');
+  }
 }
 async function syncConfigsToSupabase(){
   state.config.aduanas = dedupeList(state.config.aduanas);
@@ -1263,7 +1323,7 @@ async function initApp(){
 
   if(state.supabase){
     await carregarDaSupabase(true);
-    setStatusText('Supabase: espelho carregado automaticamente na abertura');
+    setStatusText('Supabase: carregado e auto save por PC ativo');
   } else {
     setStatusText('Supabase: modo local');
   }

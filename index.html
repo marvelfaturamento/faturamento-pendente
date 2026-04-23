@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel 902 v11 Auto Save Leve</title>
+  <title>Painel 902 v10.4 Importação Inteligente</title>
   <link rel="icon" href="data:,">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -519,56 +519,6 @@ function initSupabase(){
   try{ state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); setStatusText('Supabase: configurada no HTML'); }catch(e){ setStatusText('Supabase: erro ao criar cliente'); }
 }
 
-let pollingTimer = null;
-let isApplyingRemote = false;
-let lastRemoteStamp = '';
-
-async function persistRowToSupabase(row){
-  if(!state.supabase || !row?.id) return;
-  const payload = mapRowToDb(row);
-  const { error } = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
-  if(error) throw error;
-}
-
-async function refreshRemoteStamp(){
-  if(!state.supabase) return;
-  const { data, error } = await state.supabase
-    .from('painel_902')
-    .select('updated_at')
-    .order('updated_at', { ascending:false })
-    .limit(1);
-  if(!error && data && data.length){
-    lastRemoteStamp = data[0].updated_at || lastRemoteStamp;
-  }
-}
-
-function startPolling(){
-  if(!state.supabase || pollingTimer) return;
-  pollingTimer = setInterval(async () => {
-    if(isApplyingRemote) return;
-    try{
-      const { data, error } = await state.supabase
-        .from('painel_902')
-        .select('updated_at')
-        .order('updated_at', { ascending:false })
-        .limit(1);
-
-      if(error || !data || !data.length) return;
-      const remoteStamp = data[0].updated_at || '';
-      if(remoteStamp && lastRemoteStamp && remoteStamp !== lastRemoteStamp){
-        isApplyingRemote = true;
-        await carregarDaSupabase(true);
-        setStatusText('Supabase: atualização automática recebida');
-      }
-      lastRemoteStamp = remoteStamp || lastRemoteStamp;
-    } catch(e){
-      console.error(e);
-    } finally {
-      isApplyingRemote = false;
-    }
-  }, 12000);
-}
-
 let realtimeLoaded = false;
 let realtimeTimer = null;
 let realtimeChannels = [];
@@ -861,23 +811,13 @@ addFrete.onclick = () => {
   fPagador.value=''; fRemetente.value=''; fUfOrigem.value='EX'; fUfDestino.value=''; fFrete.value='';
   renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false);
 };
-btnSalvarCfg.onclick = async () => {
+btnSalvarCfg.onclick = () => {
   state.config.aduanas = (state.config.aduanas || []).map(v => String(v).trim()).filter(Boolean);
   state.config.alerta = (state.config.alerta || []).map(v => String(v).trim()).filter(Boolean);
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
   state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
-  state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || c.ufDestino || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
-  saveLocalDebounced();
-  reclassify();
-  renderAll(false);
-  try{
-    await syncConfigsToSupabase();
-    await refreshRemoteStamp();
-    alert('Configurações salvas.');
-  }catch(err){
-    console.error(err);
-    alert(err.message || 'Erro ao salvar configurações na Supabase.');
-  }
+  state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
+  saveLocalDebounced(); reclassify(); renderAll(false); alert('Configurações salvas.');
 };
 
 function renderAll(full=false){
@@ -945,18 +885,29 @@ function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ con
 function parseExcelRows(matrix){
   const header = detectHeaderRow(matrix);
   const rows = matrix.slice(header + 1);
-  const oldAllMap = new Map([...state.rows, ...state.finalizados].map(r => [r.id, r]));
-  const freshMap = new Map();
+
+  const oldActiveMap = new Map(state.rows.map(r => [r.id, r]));
+  const oldFinalMap = new Map(state.finalizados.map(r => [r.id, r]));
+
+  const importedActiveMap = new Map();
+  const importedFinalMap = new Map(oldFinalMap);
+
   for(const r of rows){
     if(!r || r.length < 10) continue;
+
     const ref = String(r[0] || '').trim();
     const dataPC = String(r[1] || '').trim();
     const filial = String(r[2] || '').trim();
     const pv = String(r[3] || '').trim();
     if(!ref || !pv) continue;
+
     const id = [ref, filial, pv].join('|');
-    const old = oldAllMap.get(id);
-    freshMap.set(id, {
+    const old = oldActiveMap.get(id) || oldFinalMap.get(id);
+
+    const numeroDocumentoCol21 = String(r[20] ?? '').trim();
+    const autoFinalizar = numeroDocumentoCol21 !== '';
+
+    const baseRow = {
       id, ref, dataPC, filial, pv,
       cavalo: String(r[6] ?? r[5] ?? '').trim(),
       posicao: String(r[8] ?? '').trim(),
@@ -968,13 +919,45 @@ function parseExcelRows(matrix){
       pagador: String(r[14] ?? '').trim(),
       talhao: String(r[15] ?? '').trim(),
       referencia: String(r[16] ?? r[15] ?? '').trim(),
-      status: old?.status || 'Coleta',
       foiAduana: old?.foiAduana || false,
       passouCheckpoint: old?.passouCheckpoint || false,
-      passouCheckpoint: old?.passouCheckpoint || false
+      finalizadoEm: old?.finalizadoEm || null
+    };
+
+    /* Regra 1:
+       se a PC já foi finalizada antes, ela nunca volta como ativa só porque reapareceu no Excel. */
+    if(oldFinalMap.has(id)){
+      importedFinalMap.set(id, {
+        ...baseRow,
+        status: 'Finalizado',
+        finalizadoEm: oldFinalMap.get(id)?.finalizadoEm || new Date().toISOString()
+      });
+      continue;
+    }
+
+    /* Regra 2:
+       se a coluna 21 tiver número de documento, finaliza automaticamente. */
+    if(autoFinalizar){
+      importedFinalMap.set(id, {
+        ...baseRow,
+        status: 'Finalizado',
+        finalizadoEm: old?.finalizadoEm || new Date().toISOString()
+      });
+      continue;
+    }
+
+    importedActiveMap.set(id, {
+      ...baseRow,
+      status: old?.status || 'Coleta'
     });
   }
-  state.rows = [...freshMap.values()]; reclassify(); saveLocal(); renderAll(true); queueSupabaseSync(1200);
+
+  state.rows = [...importedActiveMap.values()];
+  state.finalizados = [...importedFinalMap.values()];
+
+  reclassify();
+  saveLocal();
+  renderAll(true);
 }
 fileExcel.addEventListener('change', e => {
   const file = e.target.files[0]; if(!file) return;
@@ -989,84 +972,33 @@ fileExcel.addEventListener('change', e => {
   reader.readAsArrayBuffer(file); e.target.value = '';
 });
 
-window.alterarStatus = async function(id, value, fromFinalizados=false){
+window.alterarStatus = function(id, value, fromFinalizados=false){
   id = decodeURIComponent(id);
-
-  try{
-    let row = null;
-
-    if(fromFinalizados){
-      const idx = state.finalizados.findIndex(x => x.id === id);
-      if(idx < 0) return;
-      row = state.finalizados[idx];
-      row.status = value;
-
-      if(value !== 'Finalizado'){
-        state.finalizados.splice(idx, 1);
-        state.rows.unshift(row);
-        reclassify();
-      }
-
-      renderAll(false);
-      await persistRowToSupabase(row);
-      await saveLocal();
-      await refreshRemoteStamp();
-      setStatusText('Supabase: item salvo automaticamente');
-      return;
-    }
-
-    row = state.rows.find(x => x.id === id);
-    if(!row) return;
-
+  if(fromFinalizados){
+    const idx = state.finalizados.findIndex(x => x.id === id);
+    if(idx < 0) return;
+    const row = state.finalizados[idx];
     row.status = value;
-
-    if(value === 'Finalizado'){
-      const idx = state.rows.findIndex(x => x.id === id);
-      row.finalizadoEm = new Date().toISOString();
-      state.finalizados.unshift(row);
-      state.rows.splice(idx, 1);
-      renderAll(false);
-      await persistRowToSupabase(row);
-      await saveLocal();
-      await refreshRemoteStamp();
-      setStatusText('Supabase: item salvo automaticamente');
-      return;
-    }
-
-    reclassify();
-    renderAll(false);
-    await persistRowToSupabase(row);
-    await saveLocal();
-    await refreshRemoteStamp();
-    setStatusText('Supabase: item salvo automaticamente');
-  }catch(err){
-    console.error(err);
-    alert(err.message || 'Erro ao salvar alteração na Supabase.');
+    if(value !== 'Finalizado'){ state.finalizados.splice(idx, 1); state.rows.unshift(row); reclassify(); }
+    saveLocalDebounced(); renderAll(false); return;
   }
+  const row = state.rows.find(x => x.id === id);
+  if(!row) return;
+  row.status = value;
+  if(value === 'Finalizado'){ const idx = state.rows.findIndex(x => x.id === id); state.finalizados.unshift(row); state.rows.splice(idx, 1); saveLocalDebounced(); renderAll(false); return; }
+  reclassify(); saveLocalDebounced(); renderAll(false);
 };
 window.marcarFaturar = id => alterarStatus(id, 'Faturar', false);
 window.marcarFinalizado = id => alterarStatus(id, 'Finalizado', false);
-window.reabrirRegistro = async function(id){
+window.reabrirRegistro = function(id){
   id = decodeURIComponent(id);
   const idx = state.finalizados.findIndex(x => x.id === id);
   if(idx < 0) return;
-
-  try{
-    const row = state.finalizados[idx];
-    row.status = 'Coleta';
-    row.finalizadoEm = null;
-    state.finalizados.splice(idx, 1);
-    state.rows.unshift(row);
-    reclassify();
-    renderAll(false);
-    await persistRowToSupabase(row);
-    await saveLocal();
-    await refreshRemoteStamp();
-    setStatusText('Supabase: item salvo automaticamente');
-  }catch(err){
-    console.error(err);
-    alert(err.message || 'Erro ao reabrir PC na Supabase.');
-  }
+  const row = state.finalizados[idx];
+  row.status = 'Coleta';
+  state.finalizados.splice(idx, 1);
+  state.rows.unshift(row);
+  reclassify(); saveLocalDebounced(); renderAll(false);
 };
 btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
 
@@ -1234,7 +1166,6 @@ async function carregarDaSupabase(silent=false){
   reclassify();
   await saveLocal();
   renderAll(true);
-  await refreshRemoteStamp();
   setStatusText(`Supabase: espelho carregado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
 }
 btnSyncSupabase.onclick = syncToSupabase;
@@ -1249,11 +1180,9 @@ async function initApp(){
 
   if(state.supabase){
     await carregarDaSupabase(true);
-    await refreshRemoteStamp();
-    startPolling();
-    setStatusText('Supabase: auto save por item e atualização leve ativos');
+    setStatusText('Supabase: espelho carregado automaticamente na abertura');
   } else {
-    setStatusText('Supabase: modo local');
+    setStatusText('Supabase: modo espelho manual ativo (Sync = PCs / Salvar config = regras)');
   }
 }
 initApp();

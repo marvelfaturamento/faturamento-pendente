@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel 902 v10.4 Importação Inteligente</title>
+  <title>Painel 902 v12.2 Paginação Supabase</title>
   <link rel="icon" href="data:,">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -514,6 +514,24 @@ async function loadLocal(){
   if(!Array.isArray(state.config.checkpoints)) state.config.checkpoints = [{cliente:'MINERVA', cidade:'VARGINHA', ufDestino:'EX', destinoBucket:'alertaExpo', obs:'regra inicial'}];
 }
 function setStatusText(msg){ supabaseStatus.textContent = msg; }
+
+async function fetchAllRows(table, columns='*', orderColumn=null, ascending=true, pageSize=1000){
+  if(!state.supabase) return [];
+  let from = 0;
+  let all = [];
+  while(true){
+    let query = state.supabase.from(table).select(columns).range(from, from + pageSize - 1);
+    if(orderColumn) query = query.order(orderColumn, { ascending });
+    const { data, error } = await query;
+    if(error) throw error;
+    const batch = data || [];
+    all = all.concat(batch);
+    if(batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 function initSupabase(){
   if(!SUPABASE_URL || !SUPABASE_ANON_KEY){ setStatusText('Supabase: preencha URL e anon key no HTML'); return; }
   try{ state.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); setStatusText('Supabase: configurada no HTML'); }catch(e){ setStatusText('Supabase: erro ao criar cliente'); }
@@ -924,8 +942,6 @@ function parseExcelRows(matrix){
       finalizadoEm: old?.finalizadoEm || null
     };
 
-    /* Regra 1:
-       se a PC já foi finalizada antes, ela nunca volta como ativa só porque reapareceu no Excel. */
     if(oldFinalMap.has(id)){
       importedFinalMap.set(id, {
         ...baseRow,
@@ -935,8 +951,6 @@ function parseExcelRows(matrix){
       continue;
     }
 
-    /* Regra 2:
-       se a coluna 21 tiver número de documento, finaliza automaticamente. */
     if(autoFinalizar){
       importedFinalMap.set(id, {
         ...baseRow,
@@ -954,7 +968,6 @@ function parseExcelRows(matrix){
 
   state.rows = [...importedActiveMap.values()];
   state.finalizados = [...importedFinalMap.values()];
-
   reclassify();
   saveLocal();
   renderAll(true);
@@ -1055,43 +1068,50 @@ async function syncToSupabase(silent=false){
     return;
   }
 
-  setStatusText('Supabase: sincronizando espelho...');
+  setStatusText('Supabase: sincronizando espelho bruto...');
 
   const mergedMap = new Map();
   state.rows.forEach(r => mergedMap.set(r.id, {...r, status: r.status || 'Coleta'}));
   state.finalizados.forEach(r => mergedMap.set(r.id, {...r, status: 'Finalizado', finalizadoEm: r.finalizadoEm || new Date().toISOString()}));
 
   const payload = [...mergedMap.values()].map(mapRowToDb);
-  const localIds = payload.map(x => x.id).filter(Boolean);
 
-  try{
-    if(payload.length){
-      const res = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
-      if(res.error) throw res.error;
-    }
+  let error = null;
 
-    const dbIdsRes = await state.supabase.from('painel_902').select('id');
-    if(dbIdsRes.error) throw dbIdsRes.error;
+  const dbRows = await fetchAllRows('painel_902', 'id', 'id', true, 1000);
+  const dbIds = dbRows.map(x => x.id).filter(Boolean);
 
-    const dbIds = (dbIdsRes.data || []).map(x => x.id).filter(Boolean);
-    const localSet = new Set(localIds);
-    const idsToDelete = dbIds.filter(id => !localSet.has(id));
-
-    for(let i = 0; i < idsToDelete.length; i += 200){
-      const chunk = idsToDelete.slice(i, i + 200);
+  if(dbIds.length){
+    for(let i = 0; i < dbIds.length; i += 200){
+      const chunk = dbIds.slice(i, i + 200);
       const delRes = await state.supabase.from('painel_902').delete().in('id', chunk);
-      if(delRes.error) throw delRes.error;
+      error = delRes.error || error;
+      if(error) break;
     }
-
-    await saveLocal();
-    setStatusText(`Supabase: espelho atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
-    if(!silent) alert('Sincronização concluída.');
-  }catch(err){
-    console.error(err);
-    setStatusText('Supabase: erro na sincronização');
-    if(!silent) alert(err.message || JSON.stringify(err));
-    throw err;
   }
+
+  if(!error && payload.length){
+    for(let i = 0; i < payload.length; i += 500){
+      const chunk = payload.slice(i, i + 500);
+      const insRes = await state.supabase.from('painel_902').upsert(chunk, { onConflict: 'id' });
+      error = insRes.error || error;
+      if(error) break;
+    }
+  }
+
+  if(!error){
+    await syncConfigsToSupabase();
+  }
+
+  if(error){
+    setStatusText('Supabase: erro na sincronização');
+    if(!silent) alert(error.message || 'Erro ao sincronizar.');
+    throw error;
+  }
+
+  await saveLocal();
+  setStatusText(`Supabase: espelho bruto atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
+  if(!silent) alert('Sincronização concluída.');
 }
 async function carregarDaSupabase(silent=false){
   if(!state.supabase){
@@ -1101,18 +1121,16 @@ async function carregarDaSupabase(silent=false){
 
   setStatusText('Supabase: carregando espelho...');
 
-  const a = await state.supabase
-    .from('painel_902')
-    .select('*')
-    .order('data_pc', { ascending:true });
-
-  if(a.error){
+  let allRowsRaw = [];
+  try{
+    allRowsRaw = await fetchAllRows('painel_902', '*', 'data_pc', true, 1000);
+  }catch(err){
     setStatusText('Supabase: erro ao carregar');
-    if(!silent) alert(a.error.message);
+    if(!silent) alert(err.message || 'Erro ao carregar.');
     return;
   }
 
-  const allRows = (a.data || []).map(d => ({
+  const allRows = allRowsRaw.map(d => ({
     id: d.id,
     pv: d.pv || '',
     ref: d.ref || '',
@@ -1182,7 +1200,7 @@ async function initApp(){
     await carregarDaSupabase(true);
     setStatusText('Supabase: espelho carregado automaticamente na abertura');
   } else {
-    setStatusText('Supabase: modo espelho manual ativo (Sync = PCs / Salvar config = regras)');
+    setStatusText('Supabase: modo local');
   }
 }
 initApp();

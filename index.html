@@ -621,7 +621,7 @@ function competenciaMes(dataPc){ const raw = String(dataPc || '').trim().split('
 function reclassify(){
   state.rows.forEach(row => {
     row.alerta = hasAlert(row);
-    row.aduana = isAduanaPosition(row.posicao) && hasPaga(row);
+    row.aduana = isAduanaPosition(row.posicao) && hasPaga(row) && isUFEx(row.ufRem);
     row.frete = fretePadrao(row);
     row.competencia = competenciaMes(row.dataPC);
     const checkpointRule = hasCheckpointRule(row);

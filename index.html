@@ -163,6 +163,8 @@
     }
     .ok{color:#8cf1ba}.warn{color:#ffd7a7}
     .supastatus{font-size:11px;color:var(--muted)}
+    .actions.busy button,.actions.busy label.filebtn{opacity:.55;pointer-events:none;cursor:not-allowed}
+    .busyHint{display:inline-block;margin-left:8px;color:#ffd7a7;font-size:11px}
     @media (max-width:1450px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.cfgCols{grid-template-columns:1fr 1fr}}
     @media (max-width:1350px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}.cfgCols{grid-template-columns:1fr 1fr}}
     @media (max-width:1180px){
@@ -213,7 +215,7 @@
     <div class="topbar">
       <div>
         <div class="title" id="pageTitle">Painel Ativo</div>
-        <div class="supastatus" id="supabaseStatus">Supabase: pronta para sincronizar</div>
+        <div class="supastatus" id="supabaseStatus">Supabase: pronta para sincronizar</div><span class="busyHint" id="busyHint"></span>
       </div>
       <div class="actions">
         <label class="filebtn">Importar Excel 902<input id="fileExcel" type="file" accept=".xls,.xlsx,.csv" hidden></label>
@@ -523,6 +525,21 @@ async function loadLocal(){
   if(!Array.isArray(state.config.checkpoints)) state.config.checkpoints = [{cliente:'MINERVA', cidade:'VARGINHA', ufDestino:'EX', destinoBucket:'alertaExpo', obs:'regra inicial'}];
 }
 function setStatusText(msg){ supabaseStatus.textContent = msg; }
+let busyOperation = '';
+function setBusyOperation(label=''){
+  busyOperation = label || '';
+  const actionsEl = document.querySelector('.actions');
+  if(actionsEl) actionsEl.classList.toggle('busy', !!busyOperation);
+  const hint = document.getElementById('busyHint');
+  if(hint) hint.textContent = busyOperation;
+}
+function guardBusy(actionName){
+  if(busyOperation){
+    alert(`Aguarde a operação atual terminar antes de ${actionName}.`);
+    return true;
+  }
+  return false;
+}
 
 async function fetchAllRows(table, columns='*', orderColumn=null, ascending=true, pageSize=1000){
   if(!state.supabase) return [];
@@ -845,6 +862,7 @@ addFrete.onclick = () => {
   renderConfigEditors(); saveLocalDebounced(); reclassify(); renderAll(false);
 };
 btnSalvarCfg.onclick = () => {
+  if(guardBusy('salvar as configurações')) return;
   state.config.aduanas = (state.config.aduanas || []).map(v => String(v).trim()).filter(Boolean);
   state.config.alerta = (state.config.alerta || []).map(v => String(v).trim()).filter(Boolean);
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
@@ -988,6 +1006,7 @@ function parseExcelRows(matrix){
   renderAll(true);
 }
 fileExcel.addEventListener('change', e => {
+  if(guardBusy('importar o Excel')){ e.target.value=''; return; }
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
@@ -1035,6 +1054,7 @@ btnExport.onclick = () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'painel_902_base.json'; a.click(); URL.revokeObjectURL(a.href);
 };
 fileBase.addEventListener('change', e => {
+  if(guardBusy('importar a base')){ e.target.value=''; return; }
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
@@ -1088,8 +1108,14 @@ async function syncToSupabase(silent=false){
     if(!silent) alert('Preencha a conexão no HTML primeiro.');
     return;
   }
+  if(busyOperation){
+    if(!silent) alert('Já existe uma operação em andamento. Aguarde terminar.');
+    return;
+  }
 
-  setStatusText('Supabase: sincronizando espelho bruto...');
+  setBusyOperation('Sincronizando... aguarde');
+  try{
+    setStatusText('Supabase: sincronizando espelho bruto...');
 
   const mergedMap = new Map();
   state.rows.forEach(r => mergedMap.set(r.id, {...r, status: r.status || 'Coleta'}));
@@ -1133,14 +1159,23 @@ async function syncToSupabase(silent=false){
   await saveLocal();
   setStatusText(`Supabase: espelho bruto atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
   if(!silent) alert('Sincronização concluída.');
+  } finally {
+    setBusyOperation('');
+  }
 }
 async function carregarDaSupabase(silent=false){
   if(!state.supabase){
     if(!silent) alert('Preencha a conexão no HTML primeiro.');
     return;
   }
+  if(busyOperation){
+    if(!silent) alert('Já existe uma operação em andamento. Aguarde terminar.');
+    return;
+  }
 
-  setStatusText('Supabase: carregando espelho...');
+  setBusyOperation('Carregando... aguarde');
+  try{
+    setStatusText('Supabase: carregando espelho...');
 
   let allRowsRaw = [];
   try{
@@ -1212,9 +1247,12 @@ async function carregarDaSupabase(silent=false){
   await saveLocal();
   renderAll(true);
   setStatusText(`Supabase: espelho carregado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
+  } finally {
+    setBusyOperation('');
+  }
 }
-btnSyncSupabase.onclick = syncToSupabase;
-btnCarregarSupabase.onclick = carregarDaSupabase;
+btnSyncSupabase.onclick = () => { if(guardBusy('sincronizar')) return; syncToSupabase(); };
+btnCarregarSupabase.onclick = () => { if(guardBusy('carregar')) return; carregarDaSupabase(); };
 
 async function initApp(){
   await loadLocal();

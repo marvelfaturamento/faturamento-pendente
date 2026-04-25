@@ -5,7 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel 902 v12.2 Paginação Supabase</title>
   <link rel="icon" href="data:,">
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js">
+
+/* =========================================================
+   🔐 BLOQUEIO FINAL POR PERFIL - Painel 902
+   admin: tudo
+   operacional/consulta: sem Configurações
+========================================================= */
+(function aplicarBloqueio902(){
+  function aplicar(){
+    if(perfil !== 'admin'){
+      document.querySelectorAll('[data-tab="config"]').forEach(btn => btn.style.display = 'none');
+      const cfg = document.getElementById('tab-config');
+      if(cfg && !cfg.classList.contains('hidden')) openTab('ativo');
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicar); else aplicar();
+  window.addEventListener('load', aplicar);
+})();
+
+</script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root{
@@ -413,6 +432,18 @@
 </div>
 
 <script>
+// 🔐 Acesso vindo do menu pai
+const MENU_PAI_URL = "https://menu-rho-olive.vercel.app/";
+const params = new URLSearchParams(window.location.search);
+const perfil = (params.get("perfil") || "").trim();
+const usuario = params.get("usuario") || "";
+const usuarioRef = (params.get("usuarioRef") || "").trim();
+if (!perfil) {
+  alert("Acesso não autorizado. Entre pelo menu principal.");
+  window.location.href = MENU_PAI_URL;
+  throw new Error("Acesso bloqueado");
+}
+
 const SUPABASE_URL = 'https://amuhvmvgwigihgzougwz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdWh2bXZnd2lnaWhnem91Z3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MTU3NTgsImV4cCI6MjA5MjM5MTc1OH0.TwNl4Lnilp3Yrl1gAV86BgapIGgXcnUC53E7jjv03FE';
 const STORE = 'painel902_supabase_v22_meta';
@@ -571,6 +602,7 @@ function scheduleRealtimeReload(){}
 
 function setupRealtimeSubscriptions(){}
 function openTab(tab){
+  if(tab === 'config' && perfil !== 'admin') tab = 'ativo';
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-'+tab).classList.remove('hidden');
   document.querySelectorAll('.navbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));

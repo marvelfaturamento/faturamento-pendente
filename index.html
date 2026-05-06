@@ -439,6 +439,21 @@ function dedupeList(arr){ const seen = new Set(); return (arr || []).map(v => St
 function dedupeFretes(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(f => { const k = [norm(f.pagador), norm(f.remetente), norm(f.ufOrigem), norm(f.ufDestino), Number(f.frete||0)].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(f => ({pagador:f.pagador||'', remetente:f.remetente||'', ufOrigem:f.ufOrigem||'', ufDestino:f.ufDestino||'', frete:Number(f.frete||0)})); }
 function dedupeCheckpoints(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(c => { const k = [norm(c.cliente), norm(c.cidade), norm(c.ufOrigem || c.ufDestino || 'EX'), norm(c.destinoBucket || 'alertaInt')].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(c => ({cliente:c.cliente||'', cidade:c.cidade||'', ufOrigem:c.ufOrigem || c.ufDestino || 'EX', destinoBucket:c.destinoBucket || 'alertaInt'})); }
 function money(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function uniqueRowsById(rows){
+  const m = new Map();
+  (rows || []).forEach(r => {
+    if(r && r.id) m.set(r.id, r);
+  });
+  return [...m.values()];
+}
+function uniqueDbPayloadById(rows){
+  const m = new Map();
+  (rows || []).forEach(r => {
+    if(r && r.id) m.set(r.id, r);
+  });
+  return [...m.values()];
+}
+
 
 function openDB(){
   return new Promise((resolve, reject) => {
@@ -1037,8 +1052,8 @@ async function parseExcelRows(matrix){
     });
   }
 
-  state.rows = [...importedActiveMap.values()];
-  state.finalizados = [...importedFinalMap.values()];
+  state.rows = uniqueRowsById([...importedActiveMap.values()]);
+  state.finalizados = uniqueRowsById([...importedFinalMap.values()]);
   reclassify();
   saveLocal();
   renderAll(true);
@@ -1217,11 +1232,14 @@ async function syncToSupabase(silent=false){
   try{
     setStatusText('Supabase: sincronizando espelho bruto...');
 
+  state.rows = uniqueRowsById(state.rows);
+  state.finalizados = uniqueRowsById(state.finalizados);
+
   const mergedMap = new Map();
   state.rows.forEach(r => mergedMap.set(r.id, {...r, status: r.status || 'Coleta'}));
   state.finalizados.forEach(r => mergedMap.set(r.id, {...r, status: 'Finalizado', finalizadoEm: r.finalizadoEm || new Date().toISOString()}));
 
-  const payload = [...mergedMap.values()].map(mapRowToDb);
+  const payload = uniqueDbPayloadById([...mergedMap.values()].map(mapRowToDb));
 
   let error = null;
 
@@ -1247,7 +1265,7 @@ async function syncToSupabase(silent=false){
   }
 
   if(!error){
-    const finalPayload = state.finalizados.map(r => ({...mapRowToDb({...r, status:'Finalizado'}), finalizado_em: r.finalizadoEm || new Date().toISOString()}));
+    const finalPayload = uniqueDbPayloadById(uniqueRowsById(state.finalizados).map(r => ({...mapRowToDb({...r, status:'Finalizado'}), finalizado_em: r.finalizadoEm || new Date().toISOString()})));
     if(finalPayload.length){
       for(let i = 0; i < finalPayload.length; i += 500){
         const chunk = finalPayload.slice(i, i + 500);
@@ -1320,8 +1338,8 @@ async function carregarDaSupabase(silent=false){
     finalizadoEm: d.finalizado_em || null
   }));
 
-  state.finalizados = allRows.filter(r => r.status === 'Finalizado');
-  state.rows = allRows.filter(r => r.status !== 'Finalizado');
+  state.finalizados = uniqueRowsById(allRows.filter(r => r.status === 'Finalizado'));
+  state.rows = uniqueRowsById(allRows.filter(r => r.status !== 'Finalizado'));
   await carregarHistoricoFinalizadosSupabase();
 
   const cfgA = await state.supabase.from('config_aduanas').select('descricao').eq('ativo', true);

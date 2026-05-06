@@ -413,25 +413,6 @@
 </div>
 
 <script>
-// 🔐 Acesso vindo do menu pai
-const MENU_PAI_URL = "https://menu-rho-olive.vercel.app/";
-const params = new URLSearchParams(window.location.search);
-const perfil = (params.get("perfil") || "").trim().toLowerCase();
-const usuario = params.get("usuario") || "";
-const usuarioRef = (params.get("usuarioRef") || "").trim();
-
-if (!perfil) {
-  alert("Acesso não autorizado. Entre pelo menu principal.");
-  window.location.href = MENU_PAI_URL;
-  throw new Error("Acesso bloqueado");
-}
-
-function aclNormUser(v){
-  return String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-}
-function aclRestritoPorUsuario(){ return perfil !== "admin" && !!usuarioRef; }
-function aclUserMatch(v){ return aclNormUser(v) === aclNormUser(usuarioRef); }
-
 const SUPABASE_URL = 'https://amuhvmvgwigihgzougwz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdWh2bXZnd2lnaWhnem91Z3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MTU3NTgsImV4cCI6MjA5MjM5MTc1OH0.TwNl4Lnilp3Yrl1gAV86BgapIGgXcnUC53E7jjv03FE';
 const STORE = 'painel902_supabase_v22_meta';
@@ -449,7 +430,8 @@ const state = {
     fretes: [{pagador:'BENASSI', remetente:'SOCIEDAD EXPORTADORA VERFRUIT SPA', ufOrigem:'EX', ufDestino:'PR', frete:29000}],
     checkpoints: [{cliente:'MINERVA', cidade:'VARGINHA', ufOrigem:'EX', destinoBucket:'alertaInt'}]
   },
-  supabase: null
+  supabase: null,
+  remoteFinalizedIds: new Set()
 };
 
 function norm(v){ return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
@@ -589,6 +571,39 @@ let realtimeChannels = [];
 function scheduleRealtimeReload(){}
 
 function setupRealtimeSubscriptions(){}
+
+async function carregarHistoricoFinalizadosSupabase(){
+  if(!state.supabase) return new Set();
+  try{
+    const rows = await fetchAllRows('painel_902_finalizados', 'id', 'id', true, 1000);
+    state.remoteFinalizedIds = new Set((rows || []).map(x => x.id).filter(Boolean));
+    return state.remoteFinalizedIds;
+  }catch(e){
+    console.warn('Falha ao carregar histórico de finalizados da Supabase', e);
+    state.remoteFinalizedIds = state.remoteFinalizedIds || new Set();
+    return state.remoteFinalizedIds;
+  }
+}
+
+async function salvarNoHistoricoFinalizados(row){
+  if(!state.supabase || !row?.id) return;
+  const payload = {
+    ...mapRowToDb({...row, status:'Finalizado'}),
+    finalizado_em: row.finalizadoEm || new Date().toISOString()
+  };
+  const { error } = await state.supabase.from('painel_902_finalizados').upsert(payload, { onConflict:'id' });
+  if(error) throw error;
+  state.remoteFinalizedIds = state.remoteFinalizedIds || new Set();
+  state.remoteFinalizedIds.add(row.id);
+}
+
+async function removerDoHistoricoFinalizados(id){
+  if(!state.supabase || !id) return;
+  const { error } = await state.supabase.from('painel_902_finalizados').delete().eq('id', id);
+  if(error) throw error;
+  if(state.remoteFinalizedIds) state.remoteFinalizedIds.delete(id);
+}
+
 function openTab(tab){
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-'+tab).classList.remove('hidden');
@@ -605,22 +620,6 @@ document.addEventListener('click', (e) => {
   const tab = btn.dataset.open;
   if(tab) openTab(tab);
 });
-
-function aplicarPermissoesPainel902(){
-  if(perfil === 'admin') return;
-  document.querySelectorAll('[data-tab="config"]').forEach(el => el.style.display = 'none');
-  const configTab = document.getElementById('tab-config');
-  if(configTab) configTab.classList.add('hidden');
-  const activeConfig = document.querySelector('[data-tab="config"].active');
-  if(activeConfig) openTab('ativo');
-}
-const originalOpenTabPainel902 = openTab;
-openTab = function(tab){
-  if(tab === 'config' && perfil !== 'admin') tab = 'ativo';
-  return originalOpenTabPainel902(tab);
-};
-aplicarPermissoesPainel902();
-
 
 function isAduanaPosition(pos){ const t = norm(pos); return state.config.aduanas.some(x => t.includes(norm(x))); }
 function isInBrazil(pos){ return norm(pos).includes('BRASIL'); }
@@ -968,12 +967,14 @@ function renderAll(full=false){
 [buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAg,clienteAg,ufDestinoAg,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => renderAll(false)));
 
 function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ const t = (rows[i]||[]).map(x => norm(x)).join('|'); if(t.includes('REF') && t.includes('DATA PC') && t.includes('MOTORISTA')) return i; } return 0; }
-function parseExcelRows(matrix){
+async function parseExcelRows(matrix){
   const header = detectHeaderRow(matrix);
   const rows = matrix.slice(header + 1);
 
+  await carregarHistoricoFinalizadosSupabase();
   const oldActiveMap = new Map(state.rows.map(r => [r.id, r]));
   const oldFinalMap = new Map(state.finalizados.map(r => [r.id, r]));
+  const remoteFinalizedIds = state.remoteFinalizedIds || new Set();
 
   const importedActiveMap = new Map();
   const importedFinalMap = new Map(oldFinalMap);
@@ -1010,12 +1011,13 @@ function parseExcelRows(matrix){
       finalizadoEm: old?.finalizadoEm || null
     };
 
-    if(oldFinalMap.has(id)){
+    if(oldFinalMap.has(id) || remoteFinalizedIds.has(id) || old?.status === 'Finalizado'){
       importedFinalMap.set(id, {
         ...baseRow,
         status: 'Finalizado',
-        finalizadoEm: oldFinalMap.get(id)?.finalizadoEm || new Date().toISOString()
+        finalizadoEm: oldFinalMap.get(id)?.finalizadoEm || old?.finalizadoEm || new Date().toISOString()
       });
+      remoteFinalizedIds.add(id);
       continue;
     }
 
@@ -1025,6 +1027,7 @@ function parseExcelRows(matrix){
         status: 'Finalizado',
         finalizadoEm: old?.finalizadoEm || new Date().toISOString()
       });
+      remoteFinalizedIds.add(id);
       continue;
     }
 
@@ -1171,6 +1174,8 @@ async function autoSaveSingleRow(row, actionLabel='salvar a PC'){
     const payload = mapRowToDb(row);
     const { error } = await state.supabase.from('painel_902').upsert(payload, { onConflict: 'id' });
     if(error) throw error;
+    if(row.status === 'Finalizado') await salvarNoHistoricoFinalizados(row);
+    else await removerDoHistoricoFinalizados(row.id);
     await saveLocal();
     setStatusText(`Supabase: ${actionLabel} concluído`);
   } finally {
@@ -1242,6 +1247,18 @@ async function syncToSupabase(silent=false){
   }
 
   if(!error){
+    const finalPayload = state.finalizados.map(r => ({...mapRowToDb({...r, status:'Finalizado'}), finalizado_em: r.finalizadoEm || new Date().toISOString()}));
+    if(finalPayload.length){
+      for(let i = 0; i < finalPayload.length; i += 500){
+        const chunk = finalPayload.slice(i, i + 500);
+        const histRes = await state.supabase.from('painel_902_finalizados').upsert(chunk, { onConflict:'id' });
+        error = histRes.error || error;
+        if(error) break;
+      }
+    }
+  }
+
+  if(!error){
     await syncConfigsToSupabase();
   }
 
@@ -1305,6 +1322,7 @@ async function carregarDaSupabase(silent=false){
 
   state.finalizados = allRows.filter(r => r.status === 'Finalizado');
   state.rows = allRows.filter(r => r.status !== 'Finalizado');
+  await carregarHistoricoFinalizadosSupabase();
 
   const cfgA = await state.supabase.from('config_aduanas').select('descricao').eq('ativo', true);
   const cfgB = await state.supabase.from('config_clientes_alerta').select('cliente').eq('ativo', true);

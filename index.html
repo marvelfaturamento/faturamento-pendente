@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+
+<!-- saved from url=(0092)https://faturamento-pendente.vercel.app/?perfil=admin&usuario=Tiago&usuarioRef=tiago.carniel -->
+<html lang="pt-BR"><head><meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Painel 902 v12.2 Paginação Supabase</title>
+<link href="data:," rel="icon"/>
+
+
+
+
+<meta id="dcngeagmmhegagicpcmpinaoklddcgon"/><meta id="dcngeagmmhegagicpcmpinaoklddcgon"/><link href="css/painel902.css" rel="stylesheet"/></head>
+<body>
+<div class="app">
+<aside class="side">
+<div class="brand">
+<h1>Painel 902</h1>
+<p>Versão otimizada: carrega dados pela Supabase/local e renderiza somente a aba aberta, com paginação de 50 linhas.</p>
+</div>
+<button class="navbtn" data-tab="ativo">Painel Ativo</button>
+<button class="navbtn" data-tab="agNota">Ag nota</button>
+<button class="navbtn active" data-tab="aduana">Aduana</button>
+<button class="navbtn" data-tab="alertaNac">Clientes alerta nacional</button>
+<button class="navbtn" data-tab="alertaInt">Clientes alerta internacional impo</button>
+<button class="navbtn" data-tab="alertaExpo">Clientes alerta internacional expo</button>
+<button class="navbtn" data-tab="finalizados">Finalizados</button>
+<button class="navbtn" data-tab="config">Configurações</button>
+</aside>
+<main class="main">
+<div class="topbar">
+<div>
+<div class="title" id="pageTitle">Aduana</div>
+<div class="supastatus" id="supabaseStatus">Supabase: carregado e auto save por PC ativo</div><span class="busyHint" id="busyHint"></span>
+</div>
+<div class="actions">
+<label class="filebtn">Importar Excel 902<input accept=".xls,.xlsx,.csv" hidden="" id="fileExcel" type="file"/></label>
+<button id="btnSyncSupabase">Sincronizar Supabase</button>
+<button id="btnCarregarSupabase">Carregar Supabase</button>
+<button id="btnExport">Exportar Base</button>
+<label class="filebtn">Importar Base<input accept=".json" hidden="" id="fileBase" type="file"/></label>
+</div>
+</div>
+<div class="cards">
+<button class="cardBtn" data-open="ativo"><div class="k">PCs ativas</div><div class="v" id="cAtivas">0</div><div class="k">No painel principal</div></button>
+<button class="cardBtn" data-open="agNota"><div class="k">Ag nota</div><div class="v" id="cAg">0</div><div class="k" id="cAgFrete">R$ 0,00 em fretes</div></button>
+<button class="cardBtn" data-open="aduana"><div class="k">Em aduana</div><div class="v" id="cAduana">0</div><div class="k">Clientes com regra de aduana</div></button>
+<button class="cardBtn" data-open="alertaNac"><div class="k">Alerta nacional</div><div class="v" id="cNac">0</div><div class="k">UF destino diferente de EX</div></button>
+<button class="cardBtn" data-open="alertaInt"><div class="k">Alerta internacional impo</div><div class="v" id="cInt">0</div><div class="k">UF EX ou saída de aduana</div></button>
+<button class="cardBtn" data-open="alertaExpo"><div class="k">Alerta internacional expo</div><div class="v" id="cExpo">0</div><div class="k">Clientes exportação com UF destino EX</div></button>
+</div>
+<section class="panel tab hidden" id="tab-ativo">
+<div class="filters">
+<div class="field"><small>Busca</small><input id="buscaAtivo" placeholder="Cavalo, pagador, posição, motorista..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteAtivo"><option value="">Todos</option></select></div>
+<div class="field"><small>UF origem</small><select id="ufOrigemAtivo"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoAtivo"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">PCs ativas</h3>
+<div class="tableWrap"><table id="tbAtivo"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-agNota">
+<div class="filters" style="grid-template-columns:1.5fr 1fr 1fr">
+<div class="field"><small>Busca</small><input id="buscaAg" placeholder="Cavalo, cliente, posição..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteAg"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoAg"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">Ag nota</h3>
+<div class="summaryLine">
+<div>Total de casos: <strong id="sumAgQtd">30</strong></div>
+<div>Total de frete padrão: <strong id="sumAgFrete">R$ 1.015.010,00</strong></div>
+</div>
+<div class="tableWrap"><table id="tbAg"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Frete</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab" id="tab-aduana">
+<div class="filters" style="grid-template-columns:1.5fr 1fr 1fr">
+<div class="field"><small>Busca</small><input id="buscaAduana" placeholder="Cavalo, cliente, posição..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteAduana"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoAduana"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">Aduana</h3>
+<div class="summaryLine">
+<div>Total de casos: <strong id="sumAduanaQtd">13</strong></div>
+<div>Total de frete padrão: <strong id="sumAduanaFrete">R$ 458.800,00</strong></div>
+</div>
+<div class="tableWrap"><table id="tbAduana"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Frete</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-alertaNac">
+<div class="filters">
+<div class="field"><small>Busca</small><input id="buscaNac" placeholder="Cavalo, cliente, posição..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteNac"><option value="">Todos</option></select></div>
+<div class="field"><small>Status</small><select id="statusNac"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoNac"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">Clientes alerta nacional</h3>
+<div class="tableWrap"><table id="tbNac"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-alertaInt">
+<div class="filters">
+<div class="field"><small>Busca</small><input id="buscaInt" placeholder="Cavalo, cliente, posição..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteInt"><option value="">Todos</option></select></div>
+<div class="field"><small>Status</small><select id="statusInt"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoInt"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">Clientes alerta internacional</h3>
+<div class="tableWrap"><table id="tbInt"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-alertaExpo">
+<div class="filters">
+<div class="field"><small>Busca</small><input id="buscaExpo" placeholder="Cavalo, cliente, posição..."/></div>
+<div class="field"><small>Cliente</small><select id="clienteExpo"><option value="">Todos</option></select></div>
+<div class="field"><small>Status</small><select id="statusExpo"><option value="">Todos</option></select></div>
+<div class="field"><small>UF destino</small><select id="ufDestinoExpo"><option value="">Todos</option></select></div>
+</div>
+<h3 class="sectionTitle">Clientes alerta internacional expo</h3>
+<div class="tableWrap"><table id="tbExpo"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-finalizados">
+<div class="summaryLine"><button class="btn-red" id="btnLimparFinalizados">Excluir lote local</button></div>
+<h3 class="sectionTitle">Finalizados</h3>
+<div class="tableWrap"><table id="tbFim"><thead><tr><th>Cavalo</th><th>Data PC</th><th>Posição</th><th>Pagador</th><th>Remetente / UF</th><th>Destinatário / UF</th><th>Motorista</th><th>Talhão</th><th>Referência</th><th>Status</th><th>Ações</th></tr></thead><tbody></tbody></table></div>
+</section>
+<section class="panel tab hidden" id="tab-config">
+<div class="grid2">
+<div class="cfgStack">
+<div>
+<h3 class="sectionTitle">Controle mensal</h3>
+<div class="cfgGroup">
+<div class="small" style="margin-bottom:8px">Aqui o admin vê quais competências já podem ser zeradas.</div>
+<div id="mesesBox"></div>
+</div>
+</div>
+<div>
+<h3 class="sectionTitle">Frete padrão</h3>
+<div class="cfgGroup">
+<div class="cfgInputLine5">
+<div class="field"><small>Tomador</small><input id="fPagador" placeholder="Tomador"/></div>
+<div class="field"><small>Remetente</small><input id="fRemetente" placeholder="Remetente"/></div>
+<div class="field"><small>UF origem</small><input id="fUfOrigem" value="EX"/></div>
+<div class="field"><small>UF destino</small><input id="fUfDestino" placeholder="UF"/></div>
+<div class="field"><small>Frete</small><input id="fFrete" placeholder="0,00"/></div>
+<button class="plusbtn" id="addFrete">+</button>
+</div>
+<div class="cfgFreteHistory" id="fretesBox"></div>
+</div>
+</div>
+</div>
+<div class="cfgCols">
+<div class="cfgStack">
+<div>
+<h3 class="sectionTitle">Clientes com regra de aduana</h3>
+<div class="cfgGroup">
+<div class="cfgInputLine">
+<div class="field"><small>Cliente</small><input id="novoPaga" placeholder="Digite e clique em +"/></div>
+<button class="plusbtn" id="addPaga">+</button>
+</div>
+<div class="cfgHistory" id="pagaBox"></div>
+</div>
+</div>
+<div>
+<h3 class="sectionTitle">Aduanas monitoradas</h3>
+<div class="cfgGroup">
+<div class="cfgInputLine">
+<div class="field"><small>Aduana</small><input id="novoAduana" placeholder="Digite e clique em +"/></div>
+<button class="plusbtn" id="addAduana">+</button>
+</div>
+<div class="cfgHistory" id="aduanasBox"></div>
+</div>
+</div>
+</div>
+<div class="cfgStack">
+<div>
+<h3 class="sectionTitle">Clientes alerta nacional</h3>
+<div class="cfgGroup">
+<div class="cfgInputLine">
+<div class="field"><small>Cliente</small><input id="novoAlerta" placeholder="Digite e clique em +"/></div>
+<button class="plusbtn" id="addAlerta">+</button>
+</div>
+<div class="cfgHistory" id="alertasBox"></div>
+</div>
+</div>
+<div>
+<h3 class="sectionTitle">Clientes exportação EX</h3>
+<div class="cfgGroup">
+<div class="cfgInputLine">
+<div class="field"><small>Cliente</small><input id="novoExpo" placeholder="Digite e clique em +"/></div>
+<button class="plusbtn" id="addExpo">+</button>
+</div>
+<div class="cfgHistory" id="expoBox"></div>
+</div>
+</div>
+<div>
+<h3 class="sectionTitle">Checkpoints especiais</h3>
+<div class="cfgGroup cfgGroupCompact">
+<div class="checkpointCompactLine">
+<input class="cpClienteInput" id="cpCliente" placeholder="Cliente"/>
+<input class="cpCidadeInput" id="cpCidade" placeholder="Cidade"/>
+<input class="cpUfInput" id="cpUfOrigem" value="EX"/>
+<button class="plusbtn" id="addCheckpoint">+</button>
+</div>
+<div class="cfgHistory" id="checkpointBox"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="summaryLine" style="margin-top:10px">
+<button id="btnSalvarCfg">Salvar configurações</button>
+</div>
+</section>
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script><script defer="" src="js/app.js"></script></body></html>

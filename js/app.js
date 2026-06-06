@@ -20,12 +20,6 @@ const state = {
   remoteFinalizedIds: new Set()
 };
 
-let activeTab = 'aduana';
-const PAGE_SIZE = 50;
-const tablePages = {ativo:1, agNota:1, aduana:1, alertaNac:1, alertaInt:1, alertaExpo:1, finalizados:1};
-function resetPage(tab){ if(tab) tablePages[tab] = 1; }
-function currentActiveTab(){ return activeTab || document.querySelector('.navbtn.active')?.dataset.tab || 'ativo'; }
-
 function norm(v){ return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
 function dedupeList(arr){ const seen = new Set(); return (arr || []).map(v => String(v||'').trim()).filter(Boolean).filter(v => { const k = norm(v); if(seen.has(k)) return false; seen.add(k); return true; }); }
 function dedupeFretes(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(f => { const k = [norm(f.pagador), norm(f.remetente), norm(f.ufOrigem), norm(f.ufDestino), Number(f.frete||0)].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(f => ({pagador:f.pagador||'', remetente:f.remetente||'', ufOrigem:f.ufOrigem||'', ufDestino:f.ufDestino||'', frete:Number(f.frete||0)})); }
@@ -212,14 +206,12 @@ async function removerDoHistoricoFinalizados(id){
 }
 
 function openTab(tab){
-  activeTab = tab;
-  resetPage(tab);
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   document.getElementById('tab-'+tab).classList.remove('hidden');
   document.querySelectorAll('.navbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   const labels = {ativo:'Painel Ativo', agNota:'Ag nota', aduana:'Aduana', alertaNac:'Clientes alerta nacional', alertaInt:'Clientes alerta internacional impo', alertaExpo:'Clientes alerta internacional expo', finalizados:'Finalizados', config:'Configurações'};
   pageTitle.textContent = labels[tab];
-  renderAll(false);
+  renderAll(true);
 }
 document.querySelectorAll('.navbtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.tab));
 document.querySelectorAll('.cardBtn').forEach(btn => btn.onclick = () => openTab(btn.dataset.open));
@@ -267,6 +259,18 @@ function isAduanaPosition(pos){
 
 }
 function isInBrazil(pos){ return norm(pos).includes('BRASIL'); }
+function ufPosicaoBrasil(pos){
+  const t = norm(pos);
+  if(!t.includes('BRASIL')) return '';
+  const antesBrasil = t.split('BRASIL')[0];
+  const ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+  const encontrados = [];
+  antesBrasil.replace(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/g, (m) => { encontrados.push(m); return m; });
+  return encontrados.length ? encontrados[encontrados.length - 1] : '';
+}
+function temRegraPadrao(row, checkpointRule){
+  return !!(hasPaga(row) || hasAlert(row) || hasExpo(row) || checkpointRule);
+}
 function isUFEx(v){ const t = norm(v); return t === 'EX' || t === 'UF EX' || t.endsWith(' EX') || t.startsWith('EX '); }
 function startsWithCfg(value, cfgList){
   const v = norm(value);
@@ -434,6 +438,47 @@ function reclassify(){
       return;
     }
 
+    /* REGRAS AUTOMATICAS PARA CASOS SEM REGRA PADRAO
+       1) Origem EX sem regra: ao registrar BRASIL, sobe para alerta internacional impo.
+       2) Exportação sem regra: se UF da posição divergir da UF do remetente, sobe para alerta expo.
+       3) Nacional sem regra: se UF da posição divergir da UF do remetente, sobe para alerta nacional.
+    */
+    const semRegraPadrao = !temRegraPadrao(row, checkpointRule);
+
+    if(semRegraPadrao && isUFEx(row.ufRem) && isInBrazil(row.posicao)){
+      row.bucket = 'alertaInt';
+      row.status = 'Faturar';
+      return;
+    }
+
+    const ufPosicaoAtual = ufPosicaoBrasil(row.posicao);
+
+    if(
+      semRegraPadrao &&
+      !isUFEx(row.ufRem) &&
+      isUFEx(row.ufDest) &&
+      ufPosicaoAtual &&
+      norm(row.ufRem) &&
+      ufPosicaoAtual !== norm(row.ufRem)
+    ){
+      row.bucket = 'alertaExpo';
+      row.status = 'Faturar';
+      return;
+    }
+
+    if(
+      semRegraPadrao &&
+      !isUFEx(row.ufRem) &&
+      !isUFEx(row.ufDest) &&
+      ufPosicaoAtual &&
+      norm(row.ufRem) &&
+      ufPosicaoAtual !== norm(row.ufRem)
+    ){
+      row.bucket = 'alertaNac';
+      row.status = 'Faturar';
+      return;
+    }
+
     row.bucket = 'ativo';
 
     if(!['Coleta','AG Nota','Aduana','Faturar','Finalizado'].includes(row.status)){
@@ -453,31 +498,40 @@ function columns(includeFrete=false, fromFinalizados=false){
   cols.push(['Ações', r => rowButtons(r, fromFinalizados)]);
   return cols;
 }
-function tableKeyFromEl(el){
-  const id = el && el.id;
-  return ({tbAtivo:'ativo', tbAg:'agNota', tbAduana:'aduana', tbNac:'alertaNac', tbInt:'alertaInt', tbExpo:'alertaExpo', tbFim:'finalizados'})[id] || 'ativo';
-}
+const PAGE_SIZE_902 = 50;
 function renderTable(el, rows, includeFrete=false, fromFinalizados=false){
   const cols = columns(includeFrete, fromFinalizados);
-  const key = tableKeyFromEl(el);
   const total = rows.length;
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const page = Math.min(Math.max(1, tablePages[key] || 1), pages);
-  tablePages[key] = page;
-  const start = (page - 1) * PAGE_SIZE;
-  const pageRows = rows.slice(start, start + PAGE_SIZE);
-  el.innerHTML = `<thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${pageRows.length ? pageRows.map(r => `<tr>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" style="text-align:center;color:#9bb0df">Nenhum registro encontrado.</td></tr>`}</tbody>`;
-  let pager = el.parentElement.querySelector('.pager[data-for="'+el.id+'"]');
-  if(!pager){ pager = document.createElement('div'); pager.className = 'pager'; pager.dataset.for = el.id; el.parentElement.appendChild(pager); }
-  pager.innerHTML = `<span>${total} registros • página ${page}/${pages} • exibindo ${pageRows.length}</span><button class="mini" data-page-action="prev" data-table="${key}" ${page<=1?'disabled':''}>Anterior</button><button class="mini" data-page-action="next" data-table="${key}" ${page>=pages?'disabled':''}>Próxima</button>`;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE_902));
+  let page = Number(el.dataset.page || 1);
+  if(!Number.isFinite(page) || page < 1) page = 1;
+  if(page > pages) page = pages;
+  el.dataset.page = String(page);
+  const start = (page - 1) * PAGE_SIZE_902;
+  const shown = rows.slice(start, start + PAGE_SIZE_902);
+  el.innerHTML = `<thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${shown.length ? shown.map(r => `<tr>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" style="text-align:center;color:#9bb0df">Nenhum registro encontrado.</td></tr>`}</tbody>`;
+  renderPager(el, total, page, pages);
 }
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-page-action]');
-  if(!btn) return;
-  const key = btn.dataset.table;
-  tablePages[key] = Math.max(1, (tablePages[key] || 1) + (btn.dataset.pageAction === 'next' ? 1 : -1));
+function renderPager(el, total, page, pages){
+  let pager = document.getElementById('pager-' + el.id);
+  if(!pager){
+    pager = document.createElement('div');
+    pager.id = 'pager-' + el.id;
+    pager.className = 'pager902';
+    el.insertAdjacentElement('afterend', pager);
+  }
+  if(total <= PAGE_SIZE_902){ pager.innerHTML = `<span>${total} registro(s)</span>`; return; }
+  pager.innerHTML = `
+    <button class="mini" ${page<=1?'disabled':''} onclick="setTablePage902('${el.id}', ${page-1})">Anterior</button>
+    <span>Página ${page} de ${pages} — ${total} registro(s)</span>
+    <button class="mini" ${page>=pages?'disabled':''} onclick="setTablePage902('${el.id}', ${page+1})">Próxima</button>
+  `;
+}
+function setTablePage902(tableId, page){
+  const el = document.getElementById(tableId);
+  if(el){ el.dataset.page = String(page); }
   renderAll(false);
-});
+}
 function unique(rows, key){ return [...new Set(rows.map(r => r[key]).filter(Boolean))]; }
 
 function parseDateBr(s){
@@ -624,36 +678,43 @@ function renderAll(full=false){
     fillSelect(clienteAtivo, unique(sets.ativo, 'pagador'), clienteAtivo.value);
     fillSelect(ufOrigemAtivo, unique(sets.ativo, 'ufRem'), ufOrigemAtivo.value);
     fillSelect(ufDestinoAtivo, unique(sets.ativo, 'ufDest'), ufDestinoAtivo.value);
+
     fillSelect(clienteAg, unique(sets.agNota, 'pagador'), clienteAg.value);
     fillSelect(ufDestinoAg, unique(sets.agNota, 'ufDest'), ufDestinoAg.value);
+
     fillSelect(clienteAduana, unique(sets.aduana, 'pagador'), clienteAduana.value);
     fillSelect(ufDestinoAduana, unique(sets.aduana, 'ufDest'), ufDestinoAduana.value);
+
     fillSelect(clienteNac, unique(sets.alertaNac, 'pagador'), clienteNac.value);
     fillSelect(statusNac, unique(sets.alertaNac, 'status'), statusNac.value);
     fillSelect(ufDestinoNac, unique(sets.alertaNac, 'ufDest'), ufDestinoNac.value);
+
     fillSelect(clienteInt, unique(sets.alertaInt, 'pagador'), clienteInt.value);
     fillSelect(statusInt, unique(sets.alertaInt, 'status'), statusInt.value);
     fillSelect(ufDestinoInt, unique(sets.alertaInt, 'ufDest'), ufDestinoInt.value);
+
     fillSelect(clienteExpo, unique(sets.alertaExpo, 'pagador'), clienteExpo.value);
     fillSelect(statusExpo, unique(sets.alertaExpo, 'status'), statusExpo.value);
     fillSelect(ufDestinoExpo, unique(sets.alertaExpo, 'ufDest'), ufDestinoExpo.value);
   }
 
-  const tab = currentActiveTab();
-  let agRows = [], adRows = [];
-  if(tab === 'ativo') renderTable(tbAtivo, filterRows(sets.ativo, {q: buscaAtivo.value, client: clienteAtivo.value, ufOrigem: ufOrigemAtivo.value, ufDestino: ufDestinoAtivo.value}));
-  if(tab === 'agNota') { agRows = filterRows(sets.agNota, {q: buscaAg.value, client: clienteAg.value, ufDestino: ufDestinoAg.value}); renderTable(tbAg, agRows, true); }
-  if(tab === 'aduana') { adRows = filterRows(sets.aduana, {q: buscaAduana.value, client: clienteAduana.value, ufDestino: ufDestinoAduana.value}); renderTable(tbAduana, adRows, true); }
-  if(tab === 'alertaNac') renderTable(tbNac, filterRows(sets.alertaNac, {q: buscaNac.value, client: clienteNac.value, status: statusNac.value, ufDestino: ufDestinoNac.value}));
-  if(tab === 'alertaInt') renderTable(tbInt, filterRows(sets.alertaInt, {q: buscaInt.value, client: clienteInt.value, status: statusInt.value, ufDestino: ufDestinoInt.value}));
-  if(tab === 'alertaExpo') renderTable(tbExpo, filterRows(sets.alertaExpo, {q: buscaExpo.value, client: clienteExpo.value, status: statusExpo.value, ufDestino: ufDestinoExpo.value}));
-  if(tab === 'finalizados') renderTable(tbFim, state.finalizados, false, true);
+  renderTable(tbAtivo, filterRows(sets.ativo, {q: buscaAtivo.value, client: clienteAtivo.value, ufOrigem: ufOrigemAtivo.value, ufDestino: ufDestinoAtivo.value}));
+  const agRows = filterRows(sets.agNota, {q: buscaAg.value, client: clienteAg.value, ufDestino: ufDestinoAg.value});
+  renderTable(tbAg, agRows, true);
+  const adRows = filterRows(sets.aduana, {q: buscaAduana.value, client: clienteAduana.value, ufDestino: ufDestinoAduana.value});
+  renderTable(tbAduana, adRows, true);
+  renderTable(tbNac, filterRows(sets.alertaNac, {q: buscaNac.value, client: clienteNac.value, status: statusNac.value, ufDestino: ufDestinoNac.value}));
+  renderTable(tbInt, filterRows(sets.alertaInt, {q: buscaInt.value, client: clienteInt.value, status: statusInt.value, ufDestino: ufDestinoInt.value}));
+  renderTable(tbExpo, filterRows(sets.alertaExpo, {q: buscaExpo.value, client: clienteExpo.value, status: statusExpo.value, ufDestino: ufDestinoExpo.value}));
+  renderTable(tbFim, state.finalizados, false, true);
 
-  if(tab === 'agNota') { sumAgQtd.textContent = agRows.length; sumAgFrete.textContent = money(agRows.reduce((a,b) => a + Number(b.frete||0), 0)); }
-  if(tab === 'aduana') { sumAduanaQtd.textContent = adRows.length; sumAduanaFrete.textContent = money(adRows.reduce((a,b) => a + Number(b.frete||0), 0)); }
-  if(tab === 'config') renderMonthsPanel();
+  sumAgQtd.textContent = agRows.length;
+  sumAgFrete.textContent = money(agRows.reduce((a,b) => a + Number(b.frete||0), 0));
+  sumAduanaQtd.textContent = adRows.length;
+  sumAduanaFrete.textContent = money(adRows.reduce((a,b) => a + Number(b.frete||0), 0));
+  renderMonthsPanel();
 }
-[buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAg,clienteAg,ufDestinoAg,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => { resetPage(currentActiveTab()); renderAll(false); }));
+[buscaAtivo,clienteAtivo,ufOrigemAtivo,ufDestinoAtivo,buscaAg,clienteAg,ufDestinoAg,buscaAduana,clienteAduana,ufDestinoAduana,buscaNac,clienteNac,statusNac,ufDestinoNac,buscaInt,clienteInt,statusInt,ufDestinoInt,buscaExpo,clienteExpo,statusExpo,ufDestinoExpo].forEach(el => el.addEventListener('input', () => renderAll(false)));
 
 function detectHeaderRow(rows){ for(let i=0;i<Math.min(rows.length,15);i++){ const t = (rows[i]||[]).map(x => norm(x)).join('|'); if(t.includes('REF') && t.includes('DATA PC') && t.includes('MOTORISTA')) return i; } return 0; }
 async function parseExcelRows(matrix){

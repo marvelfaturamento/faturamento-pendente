@@ -1,14 +1,19 @@
-# Painel 902 otimizado v2
+# Painel 902 refatorado real v1
 
-Alterações principais:
-- HTML limpo: removidas milhares de linhas estáticas de tabela.
-- CSS e JS separados.
-- Renderização sob demanda: só renderiza a aba aberta.
-- Paginação no navegador: 50 registros por página.
-- Mantém a mesma Supabase e as mesmas tabelas/configurações do HTML original.
+Base: Painel 902 v12.2 Paginação Supabase(9).html.
 
-## Como testar
-Abra a pasta no VS Code e rode com Live Server.
+Alterações:
+- CSS extraído para css/painel902.css.
+- JavaScript extraído para js/app.js.
+- Bibliotecas Supabase e XLSX via CDN.
+- Tabelas pré-renderizadas removidas do HTML inicial.
+- Paginação visual de 50 linhas por tabela no renderTable.
 
-## Como publicar
-Suba esta pasta no GitHub/Vercel. A Supabase continua a mesma.
+Como subir:
+- Subir o conteúdo desta pasta na raiz do repositório.
+- Manter as pastas css/ e js/.
+- Testar primeiro em Vercel de homologação.
+
+
+## v3 - regra exportação sem regra padrão
+- Casos sem regra padrão, com UF destino EX, quando a UF da posição em BRASIL divergir da UF do remetente, sobem automaticamente para Alerta internacional expo.

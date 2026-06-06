@@ -186,4 +186,5 @@
 }
 
 
-.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px;border-top:1px solid var(--line);background:#0d1838;font-size:12px}.pager button{padding:5px 9px}.perfNote{font-size:11px;color:#ffd7a7;margin-left:8px}.tableWrap table tbody tr:nth-child(n+1){content-visibility:auto;}
+.pager902{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px;color:var(--muted);font-size:11px;border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;background:#0d1838}
+.pager902 button:disabled{opacity:.45;cursor:not-allowed}

@@ -17,3 +17,10 @@ Como subir:
 
 ## v3 - regra exportação sem regra padrão
 - Casos sem regra padrão, com UF destino EX, quando a UF da posição em BRASIL divergir da UF do remetente, sobem automaticamente para Alerta internacional expo.
+
+
+## v4 - Importar 624
+- Adicionado botão "Importar 624".
+- Lê a coluna Observação do relatório 624/CT-e.
+- Finaliza automaticamente somente quando a referência do 902 estiver preenchida, tiver pelo menos 5 caracteres e for encontrada dentro da observação do 624.
+- Campos vazios não finalizam registros.

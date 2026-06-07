@@ -793,6 +793,133 @@ async function parseExcelRows(matrix){
   saveLocal();
   renderAll(true);
 }
+
+function getHeaderIndex624(headers){
+  const normalized = headers.map(h => norm(h));
+  let idx = normalized.findIndex(h => h === 'OBSERVACAO');
+  if(idx >= 0) return idx;
+  idx = normalized.findIndex(h => h.includes('OBSERVACAO') || h === 'OBS');
+  return idx;
+}
+
+function referencia902Valida624(ref){
+  const texto = String(ref || '').trim();
+  return texto.length >= 5;
+}
+
+function extrairObservacoes624(ws){
+  const matrix = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+  let headerRowIndex = -1;
+  let obsIndex = -1;
+
+  for(let i = 0; i < matrix.length; i++){
+    const cols = matrix[i] || [];
+    const found = getHeaderIndex624(cols);
+    if(found >= 0){
+      headerRowIndex = i;
+      obsIndex = found;
+      break;
+    }
+  }
+
+  if(obsIndex < 0){
+    const jsonRows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    return jsonRows.map(linha => String(
+      linha.Observação ||
+      linha.Observacao ||
+      linha.OBSERVAÇÃO ||
+      linha.OBSERVACAO ||
+      linha.OBS ||
+      linha.obs ||
+      ''
+    )).filter(Boolean);
+  }
+
+  return matrix
+    .slice(headerRowIndex + 1)
+    .map(row => String((row || [])[obsIndex] || ''))
+    .filter(Boolean);
+}
+
+async function processarImportacao624(file){
+  if(!file) return;
+  if(guardBusy('importar o 624')) return;
+
+  setBusyOperation('Lendo 624... aguarde');
+
+  try{
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buffer), {type:'array'});
+    const observacoes = [];
+
+    wb.SheetNames.forEach(name => {
+      const ws = wb.Sheets[name];
+      observacoes.push(...extrairObservacoes624(ws));
+    });
+
+    const obsNormalizadas = observacoes.map(obs => norm(obs)).filter(Boolean);
+
+    if(!obsNormalizadas.length){
+      alert('Nenhuma observação foi encontrada no 624.');
+      return;
+    }
+
+    const ativos = uniqueRowsById(state.rows);
+    const finalizadosAntes = new Set((state.finalizados || []).map(r => r.id));
+    const novosFinalizados = [];
+    const idsParaFinalizar = new Set();
+
+    ativos.forEach(row => {
+      const referenciaOriginal = String(row.referencia || '').trim();
+      if(!referencia902Valida624(referenciaOriginal)) return;
+
+      const referenciaNormalizada = norm(referenciaOriginal);
+      if(!referenciaNormalizada || referenciaNormalizada.length < 5) return;
+
+      const achouNo624 = obsNormalizadas.some(obs => obs.includes(referenciaNormalizada));
+      if(achouNo624) idsParaFinalizar.add(row.id);
+    });
+
+    if(!idsParaFinalizar.size){
+      alert('Importação 624 concluída. Nenhuma referência do 902 foi localizada nas observações do 624.');
+      return;
+    }
+
+    const remainingRows = [];
+    state.rows.forEach(row => {
+      if(idsParaFinalizar.has(row.id)){
+        row.status = 'Finalizado';
+        row.finalizadoEm = row.finalizadoEm || new Date().toISOString();
+        if(!finalizadosAntes.has(row.id)) novosFinalizados.push(row);
+      }else{
+        remainingRows.push(row);
+      }
+    });
+
+    state.rows = uniqueRowsById(remainingRows);
+    state.finalizados = uniqueRowsById([...novosFinalizados, ...(state.finalizados || [])]);
+
+    reclassify();
+    await saveLocal();
+    renderAll(true);
+
+    setStatusText(`624: ${idsParaFinalizar.size} programação(ões) finalizada(s)`);
+
+    if(state.supabase){
+      setBusyOperation('Salvando finalizações do 624 na Supabase... aguarde');
+      await syncToSupabase(true);
+    }
+
+    alert(`${idsParaFinalizar.size} programação(ões) finalizada(s) pelo relatório 624.`);
+  }catch(err){
+    console.error(err);
+    alert(err.message || 'Erro ao importar o 624.');
+  }finally{
+    setBusyOperation('');
+  }
+}
+
+
 fileExcel.addEventListener('change', e => {
   if(guardBusy('importar o Excel')){ e.target.value=''; return; }
   const file = e.target.files[0]; if(!file) return;
@@ -806,6 +933,14 @@ fileExcel.addEventListener('change', e => {
   };
   reader.readAsArrayBuffer(file); e.target.value = '';
 });
+
+if(typeof file624 !== 'undefined' && file624){
+  file624.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    await processarImportacao624(file);
+  });
+}
 
 window.alterarStatus = async function(id, value, fromFinalizados=false){
   id = decodeURIComponent(id);

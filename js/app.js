@@ -324,7 +324,23 @@ function reclassify(){
       return;
     }
 
- 
+    /* PRIORIDADE MÁXIMA: regra de aduana/checkpoint antes de qualquer alerta.
+       Correção v5: clientes cadastrados em "Clientes com regra de aduana"
+       que ainda estejam em cidade/posição de aduana devem permanecer na aba Aduana,
+       mesmo que o status esteja como Faturar ou que a origem seja EX.
+    */
+    if(row.aduana){
+      row.bucket = 'aduana';
+      row.status = 'Aduana';
+      return;
+    }
+
+    if(checkpointRule && rowInCheckpointCity(row, checkpointRule)){
+      row.bucket = 'aduana';
+      row.status = 'Aduana';
+      row.passouCheckpoint = true;
+      return;
+    }
 
     if(row.status === 'Faturar'){
 

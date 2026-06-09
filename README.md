@@ -24,3 +24,10 @@ Como subir:
 - Lê a coluna Observação do relatório 624/CT-e.
 - Finaliza automaticamente somente quando a referência do 902 estiver preenchida, tiver pelo menos 5 caracteres e for encontrada dentro da observação do 624.
 - Campos vazios não finalizam registros.
+
+
+## v5 - Prioridade de Aduana corrigida
+- Clientes cadastrados em "Clientes com regra de aduana" agora têm prioridade sobre alertas automáticos.
+- Se a posição atual estiver em uma aduana monitorada, o registro permanece na aba Aduana.
+- Isso vale mesmo se o status estiver como Faturar ou se a origem for EX.
+- Só deve ir para Alerta IMPO/EXPO/Nacional após sair da aduana ou quando não tiver regra padrão.

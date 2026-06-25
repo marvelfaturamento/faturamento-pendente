@@ -79,6 +79,7 @@ function renderLastUpdate(){
   }
 }
 function markLastUpdate(reason=''){
+  if(reason !== 'Sincronização Supabase') return;
   state.lastUpdateAt = new Date().toISOString();
   try{ localStorage.setItem(LAST_UPDATE_KEY, state.lastUpdateAt); }catch(e){}
   renderLastUpdate();

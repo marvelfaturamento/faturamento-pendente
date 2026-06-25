@@ -51,8 +51,56 @@ function formatAgoBR(iso){
   return `Atualizado há ${dias} dia${dias > 1 ? 's' : ''}`;
 }
 function loadLastUpdate(){
+  // fallback local: usado somente se a Supabase não retornar data
   try{ state.lastUpdateAt = localStorage.getItem(LAST_UPDATE_KEY) || null; }catch(e){ state.lastUpdateAt = state.lastUpdateAt || null; }
 }
+
+async function carregarUltimaAtualizacaoSupabase(){
+  if(!state.supabase) return;
+  try{
+    const { data, error } = await state.supabase
+      .from('configuracoes_902')
+      .select('valor')
+      .eq('chave','ultima_atualizacao')
+      .maybeSingle();
+
+    if(error){
+      console.warn('Não foi possível carregar última atualização da Supabase:', error.message || error);
+      return;
+    }
+
+    if(data?.valor){
+      state.lastUpdateAt = data.valor;
+      try{ localStorage.setItem(LAST_UPDATE_KEY, state.lastUpdateAt); }catch(e){}
+      renderLastUpdate();
+    }
+  }catch(e){
+    console.warn('Falha ao ler última atualização da Supabase:', e);
+  }
+}
+
+async function salvarUltimaAtualizacaoSupabase(iso){
+  if(!state.supabase) return false;
+  try{
+    const { error } = await state.supabase
+      .from('configuracoes_902')
+      .upsert({
+        chave:'ultima_atualizacao',
+        valor: iso,
+        updated_at: new Date().toISOString()
+      }, { onConflict:'chave' });
+
+    if(error){
+      console.warn('Não foi possível salvar última atualização na Supabase:', error.message || error);
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.warn('Falha ao salvar última atualização na Supabase:', e);
+    return false;
+  }
+}
+
 function getUpdateAgeMinutes(iso){
   if(!iso) return null;
   const d = new Date(iso);
@@ -78,9 +126,11 @@ function renderLastUpdate(){
     else dotEl.classList.add('danger');
   }
 }
-function markLastUpdate(reason=''){
-  if(reason !== 'Sincronização Supabase') return;
+async function markLastUpdate(reason=''){
+  // IMPORTANTE: esta função deve ser chamada somente na sincronização Supabase.
+  // Abrir/carregar/importar o painel não altera a data de atualização.
   state.lastUpdateAt = new Date().toISOString();
+  await salvarUltimaAtualizacaoSupabase(state.lastUpdateAt);
   try{ localStorage.setItem(LAST_UPDATE_KEY, state.lastUpdateAt); }catch(e){}
   renderLastUpdate();
 }
@@ -730,7 +780,7 @@ btnSalvarCfg.onclick = () => {
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
   state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
   state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
-  saveLocalDebounced(); reclassify(); markLastUpdate('Configurações'); renderAll(true); alert('Configurações salvas.');
+  saveLocalDebounced(); reclassify(); renderAll(true); alert('Configurações salvas.');
 };
 
 function renderAll(full=false){
@@ -871,8 +921,7 @@ async function parseExcelRows(matrix){
   state.finalizados = uniqueRowsById([...importedFinalMap.values()]);
   reclassify();
   saveLocal();
-  markLastUpdate('Importação Excel 902');
-  renderAll(true);
+    renderAll(true);
 }
 
 function getHeaderIndex624(headers){
@@ -982,7 +1031,6 @@ async function processarImportacao624(file){
 
     reclassify();
     await saveLocal();
-    markLastUpdate('Importação 624');
     renderAll(true);
 
     setStatusText(`624: ${idsParaFinalizar.size} programação(ões) finalizada(s)`);
@@ -1095,7 +1143,7 @@ window.reabrirRegistro = async function(id){
     renderAll(true);
   }
 };
-btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); markLastUpdate('Limpeza de finalizados'); renderAll(true); } };
+btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
 
 btnExport.onclick = () => {
   const blob = new Blob([JSON.stringify({rows: state.rows, finalizados: state.finalizados, config: state.config}, null, 2)], {type:'application/json'});
@@ -1121,7 +1169,7 @@ fileBase.addEventListener('change', e => {
         };
       }
       if(!Array.isArray(state.config.expo)) state.config.expo = [];
-      reclassify(); renderConfigEditors(); saveLocalDebounced(); markLastUpdate('Importação Base JSON'); renderAll(true);
+      reclassify(); renderConfigEditors(); saveLocalDebounced(); renderAll(true);
     }catch(err){ alert('JSON inválido.'); }
   };
   reader.readAsText(file); e.target.value = '';
@@ -1145,7 +1193,6 @@ async function autoSaveSingleRow(row, actionLabel='salvar a PC'){
     if(row.status === 'Finalizado') await salvarNoHistoricoFinalizados(row);
     else await removerDoHistoricoFinalizados(row.id);
     await saveLocal();
-    markLastUpdate(actionLabel);
     setStatusText(`Supabase: ${actionLabel} concluído`);
   } finally {
     setBusyOperation('');
@@ -1241,7 +1288,7 @@ async function syncToSupabase(silent=false){
   }
 
   await saveLocal();
-  markLastUpdate('Sincronização Supabase');
+  await markLastUpdate('Sincronização Supabase');
   setStatusText(`Supabase: espelho bruto atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
   if(!silent) alert('Sincronização concluída.');
   } finally {
@@ -1331,7 +1378,6 @@ async function carregarDaSupabase(silent=false){
   renderConfigEditors();
   reclassify();
   await saveLocal();
-  markLastUpdate('Carregar Supabase');
   renderAll(true);
   setStatusText(`Supabase: espelho carregado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
   } finally {
@@ -1344,6 +1390,8 @@ btnCarregarSupabase.onclick = () => { if(guardBusy('carregar')) return; carregar
 async function initApp(){
   await loadLocal();
   initSupabase();
+  renderLastUpdate();
+  await carregarUltimaAtualizacaoSupabase();
   renderConfigEditors();
   reclassify();
   renderAll(true);

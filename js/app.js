@@ -686,6 +686,7 @@ function renderAll(full=false){
   cAg.textContent = sets.agNota.length;
   cAgFrete.textContent = `${money(sets.agNota.reduce((a,b) => a + Number(b.frete||0), 0))} em fretes`;
   cAduana.textContent = sets.aduana.length;
+  if(cAduanaFrete) cAduanaFrete.textContent = `${money(sets.aduana.reduce((a,b)=>a+Number(b.frete||0),0))} em fretes`;
   cNac.textContent = sets.alertaNac.length;
   cInt.textContent = sets.alertaInt.length;
   cExpo.textContent = sets.alertaExpo.length;

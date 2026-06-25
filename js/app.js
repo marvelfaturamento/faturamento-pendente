@@ -4,6 +4,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const STORE = 'painel902_supabase_v22_meta';
 const DB_NAME = 'painel902_supabase_v22_db';
 const DB_STORE = 'appstate';
+const LAST_UPDATE_KEY = STORE + '_last_update_at';
 
 const state = {
   rows: [],
@@ -17,7 +18,8 @@ const state = {
     checkpoints: [{cliente:'MINERVA', cidade:'VARGINHA', ufOrigem:'EX', destinoBucket:'alertaInt'}]
   },
   supabase: null,
-  remoteFinalizedIds: new Set()
+  remoteFinalizedIds: new Set(),
+  lastUpdateAt: null
 };
 
 function norm(v){ return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
@@ -25,6 +27,64 @@ function dedupeList(arr){ const seen = new Set(); return (arr || []).map(v => St
 function dedupeFretes(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(f => { const k = [norm(f.pagador), norm(f.remetente), norm(f.ufOrigem), norm(f.ufDestino), Number(f.frete||0)].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(f => ({pagador:f.pagador||'', remetente:f.remetente||'', ufOrigem:f.ufOrigem||'', ufDestino:f.ufDestino||'', frete:Number(f.frete||0)})); }
 function dedupeCheckpoints(arr){ const seen = new Set(); return (arr || []).filter(Boolean).filter(c => { const k = [norm(c.cliente), norm(c.cidade), norm(c.ufOrigem || c.ufDestino || 'EX'), norm(c.destinoBucket || 'alertaInt')].join('|'); if(seen.has(k)) return false; seen.add(k); return true; }).map(c => ({cliente:c.cliente||'', cidade:c.cidade||'', ufOrigem:c.ufOrigem || c.ufDestino || 'EX', destinoBucket:c.destinoBucket || 'alertaInt'})); }
 function money(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+
+function formatDateTimeBR(iso){
+  if(!iso) return 'Importe ou sincronize a base';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return 'Importe ou sincronize a base';
+  return d.toLocaleString('pt-BR', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  }).replace(',', ' •');
+}
+function formatAgoBR(iso){
+  if(!iso) return 'Importe ou sincronize a base para registrar';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return 'Importe ou sincronize a base para registrar';
+  const diff = Math.max(0, Date.now() - d.getTime());
+  const min = Math.floor(diff / 60000);
+  if(min < 1) return 'Atualizado agora';
+  if(min < 60) return `Atualizado há ${min} min`;
+  const h = Math.floor(min / 60);
+  if(h < 24) return `Atualizado há ${h} h ${min % 60} min`;
+  const dias = Math.floor(h / 24);
+  return `Atualizado há ${dias} dia${dias > 1 ? 's' : ''}`;
+}
+function loadLastUpdate(){
+  try{ state.lastUpdateAt = localStorage.getItem(LAST_UPDATE_KEY) || null; }catch(e){ state.lastUpdateAt = state.lastUpdateAt || null; }
+}
+function getUpdateAgeMinutes(iso){
+  if(!iso) return null;
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+}
+function renderLastUpdate(){
+  const dateEl = document.getElementById('lastUpdateDate');
+  const agoEl = document.getElementById('lastUpdateAgo');
+  const dotEl = document.getElementById('lastUpdateDot');
+  const boxEl = document.getElementById('lastUpdateBox');
+  const fullDate = formatDateTimeBR(state.lastUpdateAt);
+  const agoText = formatAgoBR(state.lastUpdateAt);
+  if(dateEl) dateEl.textContent = fullDate;
+  if(agoEl) agoEl.textContent = agoText;
+  if(boxEl) boxEl.title = state.lastUpdateAt ? `Última atualização: ${fullDate}` : 'Última atualização ainda não registrada';
+  if(dotEl){
+    const min = getUpdateAgeMinutes(state.lastUpdateAt);
+    dotEl.classList.remove('ok','warn','danger');
+    if(min === null) return;
+    if(min <= 15) dotEl.classList.add('ok');
+    else if(min <= 60) dotEl.classList.add('warn');
+    else dotEl.classList.add('danger');
+  }
+}
+function markLastUpdate(reason=''){
+  state.lastUpdateAt = new Date().toISOString();
+  try{ localStorage.setItem(LAST_UPDATE_KEY, state.lastUpdateAt); }catch(e){}
+  renderLastUpdate();
+}
+setInterval(renderLastUpdate, 60000);
+
 function uniqueRowsById(rows){
   const m = new Map();
   (rows || []).forEach(r => {
@@ -90,6 +150,7 @@ function saveLocalDebounced(){
   saveTimer = setTimeout(() => { saveLocal(); }, 250);
 }
 async function loadLocal(){
+  loadLastUpdate();
   try{
     const raw = JSON.parse(localStorage.getItem(STORE)||'null');
     if(raw && raw.config){
@@ -668,7 +729,7 @@ btnSalvarCfg.onclick = () => {
   state.config.expo = (state.config.expo || []).map(v => String(v).trim()).filter(Boolean);
   state.config.paga = (state.config.paga || []).map(v => String(v).trim()).filter(Boolean);
   state.config.checkpoints = (state.config.checkpoints || []).filter(c => c && c.cliente && c.cidade).map(c => ({cliente:String(c.cliente).trim(), cidade:String(c.cidade).trim(), ufOrigem:String(c.ufOrigem || 'EX').trim(), destinoBucket:String(c.destinoBucket || 'alertaInt').trim()}));
-  saveLocalDebounced(); reclassify(); renderAll(true); alert('Configurações salvas.');
+  saveLocalDebounced(); reclassify(); markLastUpdate('Configurações'); renderAll(true); alert('Configurações salvas.');
 };
 
 function renderAll(full=false){
@@ -690,6 +751,7 @@ function renderAll(full=false){
   cNac.textContent = sets.alertaNac.length;
   cInt.textContent = sets.alertaInt.length;
   cExpo.textContent = sets.alertaExpo.length;
+  renderLastUpdate();
 
   if(full){
     fillSelect(clienteAtivo, unique(sets.ativo, 'pagador'), clienteAtivo.value);
@@ -808,6 +870,7 @@ async function parseExcelRows(matrix){
   state.finalizados = uniqueRowsById([...importedFinalMap.values()]);
   reclassify();
   saveLocal();
+  markLastUpdate('Importação Excel 902');
   renderAll(true);
 }
 
@@ -918,6 +981,7 @@ async function processarImportacao624(file){
 
     reclassify();
     await saveLocal();
+    markLastUpdate('Importação 624');
     renderAll(true);
 
     setStatusText(`624: ${idsParaFinalizar.size} programação(ões) finalizada(s)`);
@@ -1030,7 +1094,7 @@ window.reabrirRegistro = async function(id){
     renderAll(true);
   }
 };
-btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); renderAll(true); } };
+btnLimparFinalizados.onclick = () => { if(confirm('Excluir todos os finalizados locais?')){ state.finalizados = []; saveLocal(); markLastUpdate('Limpeza de finalizados'); renderAll(true); } };
 
 btnExport.onclick = () => {
   const blob = new Blob([JSON.stringify({rows: state.rows, finalizados: state.finalizados, config: state.config}, null, 2)], {type:'application/json'});
@@ -1056,7 +1120,7 @@ fileBase.addEventListener('change', e => {
         };
       }
       if(!Array.isArray(state.config.expo)) state.config.expo = [];
-      reclassify(); renderConfigEditors(); saveLocalDebounced(); renderAll(true);
+      reclassify(); renderConfigEditors(); saveLocalDebounced(); markLastUpdate('Importação Base JSON'); renderAll(true);
     }catch(err){ alert('JSON inválido.'); }
   };
   reader.readAsText(file); e.target.value = '';
@@ -1080,6 +1144,7 @@ async function autoSaveSingleRow(row, actionLabel='salvar a PC'){
     if(row.status === 'Finalizado') await salvarNoHistoricoFinalizados(row);
     else await removerDoHistoricoFinalizados(row.id);
     await saveLocal();
+    markLastUpdate(actionLabel);
     setStatusText(`Supabase: ${actionLabel} concluído`);
   } finally {
     setBusyOperation('');
@@ -1175,6 +1240,7 @@ async function syncToSupabase(silent=false){
   }
 
   await saveLocal();
+  markLastUpdate('Sincronização Supabase');
   setStatusText(`Supabase: espelho bruto atualizado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
   if(!silent) alert('Sincronização concluída.');
   } finally {
@@ -1264,6 +1330,7 @@ async function carregarDaSupabase(silent=false){
   renderConfigEditors();
   reclassify();
   await saveLocal();
+  markLastUpdate('Carregar Supabase');
   renderAll(true);
   setStatusText(`Supabase: espelho carregado (${state.rows.length} ativos / ${state.finalizados.length} finalizados)`);
   } finally {

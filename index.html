@@ -15,8 +15,14 @@
 <div class="app">
 <aside class="side">
 <div class="brand">
-<h1>Painel 902</h1>
-<p>Versão v10 estável: o HTML decide localmente e a Supabase espelha somente quando você sincroniza, substituindo a base do banco pela base local.</p>
+  <h1>Painel 902</h1>
+  <div class="sideUpdateBox" id="lastUpdateBox" title="Última atualização ainda não registrada">
+    <div class="sideUpdateMain">
+      <span class="sideUpdateDot" id="lastUpdateDot"></span>
+      <span id="lastUpdateAgo">Aguardando atualização</span>
+    </div>
+    <div class="sideUpdateDate" id="lastUpdateDate">Importe ou sincronize a base</div>
+  </div>
 </div>
 <button class="navbtn" data-tab="ativo">Painel Ativo</button>
 <button class="navbtn" data-tab="agNota">Ag nota</button>

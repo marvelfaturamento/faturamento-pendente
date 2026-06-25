@@ -11,6 +11,41 @@
     .brand{padding:12px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#16265a,#0f1c41)}
     .brand h1{margin:0 0 6px;font-size:16px}
     .brand p{margin:0;color:var(--muted);font-size:11px;line-height:1.35}
+
+    .sideUpdateBox{
+      margin-top:8px;
+      padding:8px 9px;
+      border:1px solid rgba(155,176,223,.18);
+      border-radius:12px;
+      background:rgba(7,16,34,.28);
+    }
+    .sideUpdateMain{
+      display:flex;
+      align-items:center;
+      gap:7px;
+      color:#cfe0ff;
+      font-size:11.5px;
+      font-weight:700;
+      line-height:1.2;
+    }
+    .sideUpdateDot{
+      width:7px;
+      height:7px;
+      border-radius:999px;
+      background:#64748b;
+      box-shadow:0 0 0 3px rgba(100,116,139,.14);
+      flex:0 0 auto;
+    }
+    .sideUpdateDot.ok{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.14)}
+    .sideUpdateDot.warn{background:#eab308;box-shadow:0 0 0 3px rgba(234,179,8,.14)}
+    .sideUpdateDot.danger{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.14)}
+    .sideUpdateDate{
+      margin-top:5px;
+      color:var(--muted);
+      font-size:10px;
+      line-height:1.25;
+      white-space:normal;
+    }
     .navbtn{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#0f1a3a;color:#fff;font-weight:700;text-align:left;cursor:pointer;font-size:12px}
     .navbtn.active,.navbtn:hover{background:#1a2b61}
     .main{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -188,3 +223,37 @@
 
 .pager902{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:8px;color:var(--muted);font-size:11px;border:1px solid var(--line);border-top:none;border-radius:0 0 12px 12px;background:#0d1838}
 .pager902 button:disabled{opacity:.45;cursor:not-allowed}
+
+.lastUpdateBar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:8px 0 10px;
+  padding:9px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:linear-gradient(180deg,#101f49,#0b1736);
+  color:#dce8ff;
+  box-shadow:0 6px 16px rgba(0,0,0,.16);
+}
+.lastUpdateLabel{
+  display:block;
+  font-size:10px;
+  color:var(--muted);
+  margin-bottom:2px;
+}
+.lastUpdateBar strong{
+  font-size:13px;
+  font-weight:900;
+}
+.lastUpdateAgo{
+  padding:5px 9px;
+  border-radius:999px;
+  border:1px solid #2e4f99;
+  background:#112459;
+  color:#b9d2ff;
+  font-size:11px;
+  white-space:nowrap;
+}
+@media (max-width:900px){.lastUpdateBar{align-items:flex-start;flex-direction:column}.lastUpdateAgo{white-space:normal}}
